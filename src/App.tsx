@@ -20,6 +20,7 @@ type StallRecord = {
   status: StallStatus;
   vendorId: string;
   note: string;
+  locked: boolean;
 };
 
 type DayRecords = Record<StallId, StallRecord>;
@@ -27,14 +28,6 @@ type ScheduleMap = Record<string, DayRecords>;
 
 const STALLS: StallId[] = ["A1", "A2", "B1", "B2"];
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
-
-const STATUS_LABEL: Record<StallStatus, string> = {
-  empty: "空位",
-  reserved: "已預約",
-  arrived: "已出租",
-  noShow: "沒來",
-  longTerm: "長租",
-};
 
 const STATUS_COLOR: Record<StallStatus, string> = {
   empty: "#ffffff",
@@ -70,10 +63,10 @@ const defaultVendors: Vendor[] = [
 ];
 
 const emptyDayRecords = (): DayRecords => ({
-  A1: { status: "empty", vendorId: "", note: "" },
-  A2: { status: "empty", vendorId: "", note: "" },
-  B1: { status: "empty", vendorId: "", note: "" },
-  B2: { status: "empty", vendorId: "", note: "" },
+  A1: { status: "empty", vendorId: "", note: "", locked: false },
+  A2: { status: "empty", vendorId: "", note: "", locked: false },
+  B1: { status: "empty", vendorId: "", note: "", locked: false },
+  B2: { status: "empty", vendorId: "", note: "", locked: false },
 });
 
 const toDateKey = (date: Date) => {
@@ -83,7 +76,7 @@ const toDateKey = (date: Date) => {
 function App() {
   const [page, setPage] = useState<Page>("dashboard");
   const [selectedDate] = useState(toDateKey(new Date()));
-  const [selectedVendorId, setSelectedVendorId] = useState<string>("");
+  const [draggedVendorId, setDraggedVendorId] = useState<string | null>(null);
 
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     const raw = localStorage.getItem("vendors");
@@ -115,51 +108,56 @@ function App() {
   }, [schedule]);
 
   const today = new Date();
-  const todayLabel = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日 ${WEEKDAYS[today.getDay()]}`;
+  const days = Array.from({ length: 21 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    return d;
+  });
 
-  const selectedDay = schedule[selectedDate] ?? emptyDayRecords();
-
-  function handleVendorSelect(vendorId: string) {
-    setSelectedVendorId((current) => (current === vendorId ? "" : vendorId));
-  }
-
-  function handleStallClick(stall: StallId) {
-    const record = selectedDay[stall];
-
-    if (selectedVendorId && !record.vendorId) {
-      updateStall(stall, {
-        status: "reserved",
-        vendorId: selectedVendorId,
-      });
-      setSelectedVendorId("");
-      return;
-    }
+  function handleStallClick(dateKey: string, stall: StallId) {
+    const record = (schedule[dateKey] ?? emptyDayRecords())[stall];
+    if (record.locked) return;
 
     const nextStatus: StallStatus =
-      record.status === "reserved"
+      record.status === "empty"
+        ? "reserved"
+        : record.status === "reserved"
         ? "arrived"
         : record.status === "arrived"
         ? "noShow"
-        : record.status === "noShow"
-        ? "empty"
-        : "reserved";
+        : "empty";
 
-    updateStall(stall, {
+    updateStall(dateKey, stall, {
       status: nextStatus,
       vendorId: nextStatus === "empty" ? "" : record.vendorId,
     });
   }
 
-  function updateStall(
-    stall: StallId,
-    patch: Partial<StallRecord>
-  ) {
-    setSchedule((prev) => {
-      const current = prev[selectedDate] ?? emptyDayRecords();
+  function handleStallLock(dateKey: string, stall: StallId) {
+    const record = (schedule[dateKey] ?? emptyDayRecords())[stall];
+    updateStall(dateKey, stall, {
+      locked: !record.locked,
+    });
+  }
 
+  function handleDrop(dateKey: string, stall: StallId) {
+    if (!draggedVendorId) return;
+    const record = (schedule[dateKey] ?? emptyDayRecords())[stall];
+    if (record.locked) return;
+
+    updateStall(dateKey, stall, {
+      status: "reserved",
+      vendorId: draggedVendorId,
+    });
+    setDraggedVendorId(null);
+  }
+
+  function updateStall(dateKey: string, stall: StallId, patch: Partial<StallRecord>) {
+    setSchedule((prev) => {
+      const current = prev[dateKey] ?? emptyDayRecords();
       return {
         ...prev,
-        [selectedDate]: {
+        [dateKey]: {
           ...current,
           [stall]: {
             ...current[stall],
@@ -200,7 +198,7 @@ function App() {
     return (
       <div style={styles.page}>
         <button style={styles.backButton} onClick={() => setPage("dashboard")}>
-          ← 返回調度看板
+          ← 返回排攤看板
         </button>
 
         <h1 style={styles.title}>攤販名單</h1>
@@ -340,11 +338,11 @@ function App() {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.title}>今日調度看板</h1>
+      <h1 style={styles.title}>東門市場拖曳式排攤看板</h1>
 
       <div style={styles.topButtons}>
         <button style={{ ...styles.primaryButton, ...styles.activeNavButton }} disabled>
-          今日調度看板
+          排攤看板
         </button>
 
         <button
@@ -353,88 +351,6 @@ function App() {
         >
           攤販名單
         </button>
-      </div>
-
-      <div style={styles.dashboardTop}>
-        <div style={styles.todayBanner}>{todayLabel}</div>
-
-        <div style={styles.stallGrid}>
-          {STALLS.map((stall) => {
-            const record = selectedDay[stall];
-            const vendor = vendors.find((v) => v.id === record.vendorId);
-            const isEmpty = !record.vendorId;
-
-            return (
-              <button
-                key={stall}
-                type="button"
-                style={{
-                  ...styles.stallCard,
-                  borderColor: isEmpty ? "#e53935" : "#1976d2",
-                  background: isEmpty ? "#ffebee" : "#e3f2fd",
-                }}
-                onClick={() => handleStallClick(stall)}
-              >
-                <div style={styles.stallHeader}>
-                  <div style={styles.stallName}>{stall}</div>
-                  <div
-                    style={{
-                      ...styles.statusDot,
-                      background: STATUS_COLOR[record.status],
-                    }}
-                  />
-                </div>
-
-                <div style={styles.stallInfo}>
-                  <div style={styles.stallStatusLabel}>
-                    {isEmpty ? "空位" : STATUS_LABEL[record.status]}
-                  </div>
-                  <div style={styles.vendorName}>
-                    {vendor ? vendor.stallName : isEmpty ? "請點選下方攤販" : "無攤販"}
-                  </div>
-                  <div style={styles.productText}>
-                    {vendor ? vendor.product : isEmpty ? "等待排入" : ""}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={styles.vendorListSection}>
-        <div style={styles.sectionTitle}>攤販列表</div>
-        {vendors.map((vendor) => {
-          const selected = vendor.id === selectedVendorId;
-          return (
-            <button
-              key={vendor.id}
-              type="button"
-              style={{
-                ...styles.vendorCard,
-                borderColor: selected ? "#1976d2" : "#ddd",
-                background: selected ? "#e3f2fd" : "#fff",
-              }}
-              onClick={() => handleVendorSelect(vendor.id)}
-            >
-              <div style={styles.vendorAvatar}>
-                {vendor.contactName.charAt(0)}
-              </div>
-              <div style={styles.vendorContent}>
-                <div style={styles.vendorTitle}>{vendor.stallName}</div>
-                <div style={styles.vendorMeta}>{vendor.contactName}</div>
-                <div style={styles.vendorMeta}>{vendor.product}</div>
-                <a
-                  href={`tel:${vendor.phone.replace(/[^0-9+]/g, "")}`}
-                  style={styles.phoneLink}
-                >
-                  {vendor.phone}
-                </a>
-              </div>
-              {selected && <div style={styles.selectedTag}>已選取</div>}
-            </button>
-          );
-        })}
       </div>
     </div>
   );
@@ -610,13 +526,6 @@ const styles: Record<string, React.CSSProperties> = {
   callItem: {
     marginBottom: "6px",
   },
-
-  phoneLink: {
-    color: "#1565c0",
-    textDecoration: "none",
-  },
-
-  weekdayHeader: {
     display: "grid",
     gridTemplateColumns: "repeat(7, 1fr)",
     gap: "4px",
@@ -682,59 +591,114 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
 
-  dashboardTop: {
+  boardContainer: {
     display: "grid",
-    gap: "12px",
-    marginBottom: "18px",
+    gap: "20px",
   },
 
-  todayBanner: {
-    background: "#fff",
-    borderRadius: "16px",
-    padding: "16px",
-    fontSize: "20px",
-    fontWeight: "700",
-    textAlign: "center",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-  },
-
-  stallGrid: {
+  scheduleBoard: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
+    gridTemplateColumns: "repeat(3, 1fr)",
     gap: "10px",
+    overflowY: "auto",
+    maxHeight: "60vh",
   },
 
-  stallCard: {
-    border: "2px solid",
-    borderRadius: "18px",
-    padding: "14px",
-    textAlign: "left",
-    minHeight: "140px",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
-    cursor: "pointer",
+  column: {
+    display: "grid",
+    gap: "8px",
   },
 
-  stallInfo: {
-    marginTop: "10px",
+  dayBlock: {
+    background: "#fff",
+    borderRadius: "12px",
+    padding: "8px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
   },
 
-  stallStatusLabel: {
-    fontSize: "14px",
-    fontWeight: "700",
-    marginBottom: "8px",
-  },
-
-  vendorName: {
-    fontSize: "18px",
-    fontWeight: "700",
+  dayHeader: {
+    textAlign: "center",
     marginBottom: "6px",
   },
 
-  productText: {
+  dayDate: {
     fontSize: "16px",
-    color: "#444",
+    fontWeight: "bold",
+  },
+
+  dayWeekday: {
+    fontSize: "12px",
+    color: "#666",
+  },
+
+  stallsGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "6px",
+  },
+
+  stallSlot: {
+    background: "#f9f9f9",
+    borderRadius: "8px",
+    padding: "6px",
+    position: "relative",
+    cursor: "pointer",
+    minHeight: "60px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+  },
+
+  stallLabel: {
+    fontSize: "12px",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  statusParts: {
+    display: "flex",
+    gap: "2px",
+  },
+
+  reservationPart: {
+    flex: 1,
+    borderRadius: "4px",
+    fontSize: "10px",
+    textAlign: "center",
+    fontWeight: "bold",
+    height: "16px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  attendancePart: {
+    flex: 1,
+    borderRadius: "4px",
+    fontSize: "10px",
+    textAlign: "center",
+    fontWeight: "bold",
+    height: "16px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  vendorInSlot: {
+    fontSize: "10px",
+    textAlign: "center",
+    color: "#333",
+    fontWeight: "bold",
+  },
+
+  lockButton: {
+    position: "absolute",
+    top: "2px",
+    right: "2px",
+    background: "none",
+    border: "none",
+    fontSize: "12px",
+    cursor: "pointer",
   },
 
   vendorListSection: {
@@ -780,17 +744,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   vendorMeta: {
-    fontSize: "16px",
+    fontSize: "14px",
     color: "#555",
   },
 
-  selectedTag: {
-    background: "#1976d2",
-    color: "white",
-    padding: "6px 10px",
-    borderRadius: "999px",
+  phoneLink: {
+    color: "#1565c0",
+    textDecoration: "none",
     fontSize: "14px",
-    fontWeight: "700",
   },
 };
 
