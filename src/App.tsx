@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
+import TodayVendors from "./pages/TodayVendors";
 
+<<<<<<< Updated upstream
 type Page = "calendar" | "vendors" | "day";
 type StallId = "A1" | "A2" | "B1" | "B2";
 type StallStatus = "empty" | "reserved" | "arrived" | "noShow" | "longTerm";
@@ -384,10 +387,148 @@ function Shell({ title, children, onBack }: { title: string; children: React.Rea
       <div style={styles.list}>{children}</div>
     </div>
   );
+=======
+type StallStatus = "empty" | "rented" | "noshow" | "reserved" | "longterm";
+
+interface DayData {
+  date: Date;
+  stallStatus: Record<string, StallStatus>;
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <div style={styles.card}>{children}</div>;
+const STALL_IDS = ["A1", "A2", "B1", "B2"];
+
+// 生成 Mock 数据 - 为42天生成随机摊位状态
+function generateMockData(): Map<string, DayData> {
+  const dataMap = new Map<string, DayData>();
+  const today = new Date();
+  
+  for (let i = 0; i < 42; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+    const dateStr = date.toISOString().split('T')[0];
+    
+    const stallStatus: Record<string, StallStatus> = {};
+    const statuses: StallStatus[] = ["empty", "rented", "noshow", "reserved", "longterm"];
+    
+    STALL_IDS.forEach((stallId) => {
+      stallStatus[stallId] = statuses[Math.floor(Math.random() * statuses.length)];
+    });
+    
+    dataMap.set(dateStr, {
+      date,
+      stallStatus,
+    });
+  }
+  
+  return dataMap;
+}
+
+const mockData = generateMockData();
+
+function Calendar() {
+  const navigate = useNavigate();
+
+  const calendarDays = useMemo(() => {
+    const days: DayData[] = [];
+    const today = new Date();
+    
+    for (let i = 0; i < 42; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayData = mockData.get(dateStr);
+      if (dayData) {
+        days.push(dayData);
+      }
+    }
+    
+    return days;
+  }, []);
+
+  const handleDateClick = (_date: Date) => {
+    navigate('/today');
+  };
+
+  return (
+    <div style={styles.page}>
+      <h1 style={styles.title}>東門市場 4 攤位排班租位系統 v2</h1>
+      
+      <div style={styles.calendarGrid}>
+        {calendarDays.map((dayData) => {
+          const date = dayData.date;
+          const weekDayName = ["日", "一", "二", "三", "四", "五", "六"][date.getDay()];
+          const dateStr = date.toISOString().split('T')[0];
+          
+          return (
+            <div
+              key={dateStr}
+              style={styles.dayCard}
+              onClick={() => handleDateClick(date)}
+            >
+              <div style={styles.dateHeader}>
+                <div style={styles.dayNumber}>{date.getMonth() + 1}/{date.getDate()}</div>
+                <div style={styles.weekDay}>{weekDayName}</div>
+              </div>
+              
+              <div style={styles.stallsContainer}>
+                {STALL_IDS.map((stallId) => {
+                  const status = dayData.stallStatus[stallId];
+                  const stallColor = getColorForStatus(status);
+                  
+                  return (
+                    <div
+                      key={stallId}
+                      style={{
+                        ...styles.stallDot,
+                        backgroundColor: stallColor,
+                      }}
+                      title={`${stallId}: ${getStatusText(status)}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Calendar />} />
+        <Route path="/today" element={<TodayVendors />} />
+      </Routes>
+    </Router>
+  );
+}
+
+// 获取状态文本
+function getStatusText(status: StallStatus): string {
+  const statusMap: Record<StallStatus, string> = {
+    empty: "空位",
+    rented: "已出租",
+    noshow: "預約沒來",
+    reserved: "已預約",
+    longterm: "長租",
+  };
+  return statusMap[status];
+>>>>>>> Stashed changes
+}
+
+// 获取状态对应的颜色
+function getColorForStatus(status: StallStatus): string {
+  const colorMap: Record<StallStatus, string> = {
+    empty: "#ffffff",        // 白色
+    rented: "#2e7d32",      // 绿色
+    noshow: "#c62828",      // 红色
+    reserved: "#f9a825",    // 黄色
+    longterm: "#1976d2",    // 蓝色
+  };
+  return colorMap[status];
 }
 
 function TextInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
@@ -428,11 +569,17 @@ const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
     background: "#f5f5f5",
+<<<<<<< Updated upstream
     padding: "18px",
+=======
+    padding: "16px",
+    fontFamily: "Arial, sans-serif",
+>>>>>>> Stashed changes
     boxSizing: "border-box",
     fontFamily: "Arial, sans-serif",
   },
   title: {
+<<<<<<< Updated upstream
     fontSize: "30px",
     textAlign: "center",
     margin: "18px 0 20px",
@@ -648,6 +795,61 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: "8px",
     fontSize: "17px",
     fontWeight: "bold",
+=======
+    fontSize: "24px",
+    textAlign: "center",
+    margin: "16px 0 20px",
+    color: "#222",
+    fontWeight: "bold",
+  },
+  calendarGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(7, 1fr)",
+    gap: "4px",
+    width: "100%",
+    margin: "0 auto",
+  },
+  dayCard: {
+    background: "white",
+    padding: "8px 4px",
+    borderRadius: "8px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+    cursor: "pointer",
+    transition: "transform 0.2s, box-shadow 0.2s",
+    userSelect: "none",
+    minHeight: "80px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+  },
+  dateHeader: {
+    textAlign: "center",
+    marginBottom: "4px",
+  },
+  dayNumber: {
+    fontSize: "16px",
+    fontWeight: "bold",
+    color: "#222",
+    lineHeight: "1",
+  },
+  weekDay: {
+    fontSize: "10px",
+    color: "#666",
+    marginTop: "2px",
+  },
+  stallsContainer: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, 1fr)",
+    gap: "4px",
+  },
+  stallDot: {
+    width: "100%",
+    aspectRatio: "1",
+    borderRadius: "4px",
+    border: "1px solid #ddd",
+    cursor: "pointer",
+    transition: "transform 0.2s",
+>>>>>>> Stashed changes
   },
 };
 
