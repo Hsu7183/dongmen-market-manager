@@ -218,6 +218,75 @@ function App() {
             }
           />
 
+          <div style={styles.checkboxRow}>
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={newVendor.longTerm}
+                onChange={(e) =>
+                  setNewVendor({ ...newVendor, longTerm: e.target.checked })
+                }
+              />
+              是否長租
+            </label>
+          </div>
+
+          <div style={styles.toggleGroup}>
+            <div style={styles.toggleLabel}>常用星期</div>
+            <div style={styles.toggleRow}>
+              {WEEKDAYS.map((day, index) => {
+                const active = newVendor.weekdays.includes(index);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    style={{
+                      ...styles.toggleButton,
+                      background: active ? "#1976d2" : "#fff",
+                      color: active ? "#fff" : "#333",
+                      border: active ? "1px solid #1976d2" : "1px solid #ccc",
+                    }}
+                    onClick={() => {
+                      const next = newVendor.weekdays.includes(index)
+                        ? newVendor.weekdays.filter((w) => w !== index)
+                        : [...newVendor.weekdays, index];
+                      setNewVendor({ ...newVendor, weekdays: next });
+                    }}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={styles.toggleGroup}>
+            <div style={styles.toggleLabel}>常用攤位</div>
+            <div style={styles.toggleRow}>
+              {STALLS.map((stall) => {
+                const active = newVendor.preferredStall === stall;
+                return (
+                  <button
+                    key={stall}
+                    type="button"
+                    style={{
+                      ...styles.toggleButton,
+                      minWidth: "64px",
+                      background: active ? "#1976d2" : "#fff",
+                      color: active ? "#fff" : "#333",
+                      border: active ? "1px solid #1976d2" : "1px solid #ccc",
+                    }}
+                    onClick={() =>
+                      setNewVendor({ ...newVendor, preferredStall: stall })
+                    }
+                  >
+                    {stall}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <input
             style={styles.input}
             placeholder="LINE"
@@ -278,21 +347,34 @@ function App() {
                 />
               </div>
 
-              <select
-                style={styles.input}
-                value={record.status}
-                onChange={(e) =>
-                  updateStall(stall, {
-                    status: e.target.value as StallStatus,
-                  })
-                }
-              >
-                {Object.entries(STATUS_LABEL).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
+              <div style={styles.statusButtons}>
+                {(Object.entries(STATUS_LABEL) as [StallStatus, string][]).map(
+                  ([status, label]) => {
+                    const active = record.status === status;
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        style={{
+                          ...styles.statusButton,
+                          background: active ? STATUS_COLOR[status] : "#fff",
+                          color: active ? "#fff" : "#333",
+                          border: active
+                            ? `1px solid ${STATUS_COLOR[status]}`
+                            : "1px solid #ccc",
+                        }}
+                        onClick={() =>
+                          updateStall(stall, {
+                            status,
+                          })
+                        }
+                      >
+                        {label}
+                      </button>
+                    );
+                  }
+                )}
+              </div>
 
               <select
                 style={styles.input}
@@ -329,7 +411,13 @@ function App() {
 
                   {getCallList(stall).map((v) => (
                     <div key={v.id} style={styles.callItem}>
-                      {v.stallName}｜{v.phone}
+                      {v.stallName}｜
+                  <a
+                    href={`tel:${v.phone.replace(/[^0-9+]/g, "")}`}
+                    style={styles.phoneLink}
+                  >
+                    {v.phone}
+                  </a>
                     </div>
                   ))}
                 </div>
@@ -368,6 +456,14 @@ function App() {
               }}
             />
             {v}
+          </div>
+        ))}
+      </div>
+
+      <div style={styles.weekdayHeader}>
+        {WEEKDAYS.map((day) => (
+          <div key={day} style={styles.weekdayHeaderItem}>
+            {day}
           </div>
         ))}
       </div>
@@ -579,6 +675,77 @@ const styles: Record<string, React.CSSProperties> = {
 
   callItem: {
     marginBottom: "6px",
+  },
+
+  phoneLink: {
+    color: "#1565c0",
+    textDecoration: "none",
+  },
+
+  weekdayHeader: {
+    display: "grid",
+    gridTemplateColumns: "repeat(7, 1fr)",
+    gap: "4px",
+    marginBottom: "4px",
+  },
+
+  weekdayHeaderItem: {
+    textAlign: "center",
+    fontSize: "12px",
+    fontWeight: "bold",
+    color: "#444",
+  },
+
+  statusButtons: {
+    display: "grid",
+    gap: "8px",
+    marginBottom: "12px",
+  },
+
+  statusButton: {
+    height: "48px",
+    borderRadius: "14px",
+    border: "1px solid #ccc",
+    fontSize: "16px",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+
+  checkboxRow: {
+    marginBottom: "10px",
+  },
+
+  checkboxLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "16px",
+    color: "#333",
+  },
+
+  toggleGroup: {
+    marginBottom: "10px",
+  },
+
+  toggleLabel: {
+    marginBottom: "6px",
+    fontSize: "14px",
+    color: "#444",
+  },
+
+  toggleRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+    gap: "6px",
+  },
+
+  toggleButton: {
+    height: "44px",
+    borderRadius: "12px",
+    border: "1px solid #ccc",
+    fontSize: "14px",
+    fontWeight: "600",
+    cursor: "pointer",
   },
 };
 
