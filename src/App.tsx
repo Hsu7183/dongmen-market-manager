@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 
 type Page = "dashboard" | "vendors";
 type StallId = "A1" | "A2" | "B1" | "B2";
-type StallStatus = "empty" | "reserved" | "arrived" | "noShow" | "longTerm";
+type StallStatus = "empty" | "reserved" | "arrived" | "noShow";
 
 type Vendor = {
   id: string;
@@ -19,7 +19,6 @@ type Vendor = {
 type StallRecord = {
   status: StallStatus;
   vendorId: string;
-  note: string;
   locked: boolean;
 };
 
@@ -55,10 +54,10 @@ const defaultVendors: Vendor[] = [
 ];
 
 const emptyDayRecords = (): DayRecords => ({
-  A1: { status: "empty", vendorId: "", note: "", locked: false },
-  A2: { status: "empty", vendorId: "", note: "", locked: false },
-  B1: { status: "empty", vendorId: "", note: "", locked: false },
-  B2: { status: "empty", vendorId: "", note: "", locked: false },
+  A1: { status: "empty", vendorId: "", locked: false },
+  A2: { status: "empty", vendorId: "", locked: false },
+  B1: { status: "empty", vendorId: "", locked: false },
+  B2: { status: "empty", vendorId: "", locked: false },
 });
 
 const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
@@ -74,6 +73,34 @@ const buildScheduleDates = () => {
   });
 };
 
+const statusLabel = (status: StallStatus, locked: boolean) => {
+  if (locked) return "鎖";
+  switch (status) {
+    case "reserved":
+      return "預";
+    case "arrived":
+      return "到";
+    case "noShow":
+      return "沒";
+    default:
+      return "空";
+  }
+};
+
+const statusColor = (status: StallStatus, locked: boolean) => {
+  if (locked) return "#d1d5db";
+  switch (status) {
+    case "reserved":
+      return "#fff9c4";
+    case "arrived":
+      return "#dcedc8";
+    case "noShow":
+      return "#ffcdd2";
+    default:
+      return "#ffffff";
+  }
+};
+
 function App() {
   const [page, setPage] = useState<Page>("dashboard");
   const [vendors, setVendors] = useState<Vendor[]>(() => {
@@ -84,7 +111,6 @@ function App() {
     const raw = localStorage.getItem("schedule");
     return raw ? (JSON.parse(raw) as ScheduleMap) : {};
   });
-
   const [newVendor, setNewVendor] = useState({
     stallName: "",
     contactName: "",
@@ -95,6 +121,14 @@ function App() {
     weekdays: [] as number[],
     preferredStall: "" as StallId | "",
   });
+  const [mobileDragVendorId, setMobileDragVendorId] = useState<string | null>(null);
+  const [dragOverCell, setDragOverCell] = useState<{ dateKey: string; stall: StallId } | null>(null);
+  const [lockTouchTarget, setLockTouchTarget] = useState<{ dateKey: string; stall: StallId } | null>(null);
+  const [dragMessage, setDragMessage] = useState<string | null>(null);
+
+  const touchDragTimerRef = useRef<number | null>(null);
+  const touchStartPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lockTouchTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     localStorage.setItem("vendors", JSON.stringify(vendors));
@@ -105,44 +139,6 @@ function App() {
   }, [schedule]);
 
   const scheduleDates = useMemo(() => buildScheduleDates(), []);
-  const vendorMap = useMemo(
-    () =>
-      vendors.reduce((map, vendor) => {
-        map[vendor.id] = vendor;
-        return map;
-      }, {} as Record<string, Vendor>),
-    [vendors]
-  );
-
-  const statusLabel = (status: StallStatus) => {
-    switch (status) {
-      case "reserved":
-        return "預約";
-      case "arrived":
-        return "到攤";
-      case "noShow":
-        return "未到";
-      case "longTerm":
-        return "長租";
-      default:
-        return "空攤";
-    }
-  };
-
-  const statusColor = (status: StallStatus) => {
-    switch (status) {
-      case "reserved":
-        return "#fff8e1";
-      case "arrived":
-        return "#e8f5e9";
-      case "noShow":
-        return "#ffebee";
-      case "longTerm":
-        return "#e3f2fd";
-      default:
-        return "#ffffff";
-    }
-  };
 
   const updateStall = (dateKey: string, stall: StallId, patch: Partial<StallRecord>) => {
     setSchedule((prev) => {
@@ -160,37 +156,10 @@ function App() {
     });
   };
 
-  const handleVendorDragStart = (
-    event: React.DragEvent<HTMLDivElement>,
-    vendorId: string
-  ) => {
-    event.dataTransfer.setData("text/plain", vendorId);
-    event.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleDrop = (
-    event: React.DragEvent<HTMLDivElement>,
-    dateKey: string,
-    stall: StallId
-  ) => {
-    event.preventDefault();
-    const vendorId = event.dataTransfer.getData("text/plain");
-    if (!vendorId) return;
-
-    const current = schedule[dateKey] ?? emptyDayRecords();
-    if (current[stall].locked) return;
-
-    updateStall(dateKey, stall, {
-      status: "reserved",
-      vendorId,
-    });
-  };
-
   const handleCycleStatus = (dateKey: string, stall: StallId) => {
     const current = schedule[dateKey] ?? emptyDayRecords();
     const record = current[stall];
     if (record.locked) return;
-
     const nextStatus: StallStatus =
       record.status === "empty"
         ? "reserved"
@@ -198,9 +167,7 @@ function App() {
         ? "arrived"
         : record.status === "arrived"
         ? "noShow"
-        : record.status === "noShow"
-        ? "empty"
-        : "longTerm";
+        : "empty";
 
     updateStall(dateKey, stall, {
       status: nextStatus,
@@ -213,6 +180,143 @@ function App() {
     updateStall(dateKey, stall, {
       locked: !current[stall].locked,
     });
+  };
+
+  const handleDesktopDrop = (
+    event: React.DragEvent<HTMLDivElement>,
+    dateKey: string,
+    stall: StallId
+  ) => {
+    event.preventDefault();
+    const vendorId = event.dataTransfer.getData("text/plain");
+    if (!vendorId) return;
+    const current = schedule[dateKey] ?? emptyDayRecords();
+    if (current[stall].locked) return;
+    updateStall(dateKey, stall, {
+      status: "reserved",
+      vendorId,
+    });
+  };
+
+  const handleVendorTouchStart = (vendorId: string, event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    touchStartPointRef.current = {
+      x: event.touches[0]?.clientX ?? 0,
+      y: event.touches[0]?.clientY ?? 0,
+    };
+    window.clearTimeout(touchDragTimerRef.current ?? undefined);
+    touchDragTimerRef.current = window.setTimeout(() => {
+      setMobileDragVendorId(vendorId);
+      setDragMessage("長按拖曳中，移動到日期格放開");
+    }, 300);
+  };
+
+  const handleVendorTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    const startPoint = touchStartPointRef.current;
+    if (!startPoint || mobileDragVendorId) return;
+    const currentX = event.touches[0]?.clientX ?? 0;
+    const currentY = event.touches[0]?.clientY ?? 0;
+    const distance = Math.hypot(currentX - startPoint.x, currentY - startPoint.y);
+    if (distance > 10) {
+      window.clearTimeout(touchDragTimerRef.current ?? undefined);
+      touchDragTimerRef.current = null;
+    }
+  };
+
+  const handleVendorTouchEnd = () => {
+    window.clearTimeout(touchDragTimerRef.current ?? undefined);
+    touchDragTimerRef.current = null;
+    touchStartPointRef.current = null;
+    if (mobileDragVendorId) {
+      setMobileDragVendorId(null);
+      setDragMessage(null);
+      setDragOverCell(null);
+    }
+  };
+
+  const handleMobileDrop = (dateKey: string, stall: StallId, vendorId: string) => {
+    const current = schedule[dateKey] ?? emptyDayRecords();
+    if (current[stall].locked) return;
+    updateStall(dateKey, stall, {
+      status: "reserved",
+      vendorId,
+    });
+  };
+
+  useEffect(() => {
+    if (!mobileDragVendorId) return;
+
+    let currentDrop: { dateKey: string; stall: StallId } | null = null;
+
+    const handleTouchMove = (event: globalThis.TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
+      if (!target) {
+        currentDrop = null;
+        setDragOverCell(null);
+        return;
+      }
+      const cell = target.closest("[data-drop-cell]") as HTMLElement | null;
+      if (!cell) {
+        currentDrop = null;
+        setDragOverCell(null);
+        return;
+      }
+      const dateKey = cell.dataset.dateKey;
+      const stall = cell.dataset.stall as StallId | undefined;
+      if (dateKey && stall) {
+        currentDrop = { dateKey, stall };
+        setDragOverCell({ dateKey, stall });
+      } else {
+        currentDrop = null;
+        setDragOverCell(null);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (currentDrop) {
+        handleMobileDrop(currentDrop.dateKey, currentDrop.stall, mobileDragVendorId);
+      }
+      setMobileDragVendorId(null);
+      setDragMessage(null);
+      setDragOverCell(null);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd);
+
+    return () => {
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [mobileDragVendorId, schedule]);
+
+  const handleCellTouchStart = (dateKey: string, stall: StallId, event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (mobileDragVendorId) return;
+    window.clearTimeout(lockTouchTimerRef.current ?? undefined);
+    lockTouchTimerRef.current = window.setTimeout(() => {
+      setLockTouchTarget({ dateKey, stall });
+    }, 500);
+  };
+
+  const handleCellTouchEnd = (dateKey: string, stall: StallId, event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (mobileDragVendorId) return;
+    if (lockTouchTarget?.dateKey === dateKey && lockTouchTarget.stall === stall) {
+      toggleLock(dateKey, stall);
+      setLockTouchTarget(null);
+      window.clearTimeout(lockTouchTimerRef.current ?? undefined);
+      lockTouchTimerRef.current = null;
+      return;
+    }
+    window.clearTimeout(lockTouchTimerRef.current ?? undefined);
+    lockTouchTimerRef.current = null;
+    setLockTouchTarget(null);
+    handleCycleStatus(dateKey, stall);
   };
 
   const addVendor = () => {
@@ -365,99 +469,82 @@ function App() {
         <button style={styles.secondaryButton} onClick={() => setPage("vendors")}>攤販名單</button>
       </div>
 
-      <div style={styles.infoCard}>
-        <div>將攤販從下方清單拖曳到 21 日格中。</div>
-        <div>點擊格子切換狀態，鎖定後不允許更改。</div>
-      </div>
-
-      <div style={styles.dashboardGrid}>
-        <div style={styles.vendorPanel}>
-          <h2 style={styles.sectionTitle}>可拖曳攤販</h2>
-          <div style={styles.vendorList}>
-            {vendors.map((vendor) => (
-              <div
-                key={vendor.id}
-                draggable
-                onDragStart={(event) => handleVendorDragStart(event, vendor.id)}
-                style={styles.vendorCard}
-              >
-                <div style={styles.vendorTitle}>{vendor.stallName}</div>
-                <div style={styles.vendorInfo}>{vendor.contactName}</div>
-                <div style={styles.vendorInfo}>{vendor.product}</div>
-                <div style={styles.vendorInfo}>{vendor.phone}</div>
-              </div>
-            ))}
-          </div>
+      <div style={styles.topSection}>
+        <div style={styles.calendarHeader}>
+          {WEEKDAYS.map((day) => (
+            <div key={day} style={styles.weekdayCell}>{day}</div>
+          ))}
         </div>
 
-        <div style={styles.boardPanel}>
-          <h2 style={styles.sectionTitle}>21 日排攤</h2>
-          <div style={styles.boardWrapper}>
-            <div style={styles.boardGrid}>
-              <div style={styles.headerCell} />
-              {scheduleDates.map((date) => (
-                <div key={getDateKey(date)} style={styles.headerCell}>
-                  <div style={styles.headerDate}>{formatShortDate(date)}</div>
-                  <div style={styles.headerWeekday}>{WEEKDAYS[date.getDay()]}</div>
-                </div>
-              ))}
-
-              {STALLS.map((stall) => (
-                <>
-                  <div key={`${stall}-label`} style={styles.stallLabel}>
-                    {stall}
-                  </div>
-                  {scheduleDates.map((date) => {
-                    const dateKey = getDateKey(date);
-                    const dayRecords = schedule[dateKey] ?? emptyDayRecords();
+        <div style={styles.dateGrid}>
+          {scheduleDates.map((date) => {
+            const dateKey = getDateKey(date);
+            const dayRecords = schedule[dateKey] ?? emptyDayRecords();
+            return (
+              <div key={dateKey} style={styles.dateCard}>
+                <div style={styles.dateTitle}>{formatShortDate(date)}</div>
+                <div style={styles.stallGrid}>
+                  {STALLS.map((stall) => {
                     const record = dayRecords[stall];
-                    const vendor = vendorMap[record.vendorId];
-
+                    const isDragOver =
+                      dragOverCell?.dateKey === dateKey && dragOverCell?.stall === stall;
                     return (
                       <div
-                        key={`${dateKey}-${stall}`}
+                        key={stall}
+                        data-drop-cell
+                        data-date-key={dateKey}
+                        data-stall={stall}
                         style={{
-                          ...styles.cell,
-                          background: statusColor(record.status),
-                          borderColor: record.locked ? "#d32f2f" : "#ccc",
+                          ...styles.stallCell,
+                          background: statusColor(record.status, record.locked),
+                          borderColor: isDragOver ? "#2563eb" : "#cbd5e1",
+                          opacity: record.locked ? 0.8 : 1,
                         }}
                         onDragOver={(event) => event.preventDefault()}
-                        onDrop={(event) => handleDrop(event, dateKey, stall)}
+                        onDrop={(event) => handleDesktopDrop(event, dateKey, stall)}
+                        onTouchStart={(event) => handleCellTouchStart(dateKey, stall, event)}
+                        onTouchEnd={(event) => handleCellTouchEnd(dateKey, stall, event)}
                       >
-                        <div style={styles.cellHeader}>
-                          <span style={styles.cellStatus}>{statusLabel(record.status)}</span>
-                          <button
-                            type="button"
-                            style={styles.smallButton}
-                            onClick={() => handleCycleStatus(dateKey, stall)}
-                          >
-                            切換
-                          </button>
-                          <button
-                            type="button"
-                            style={styles.lockButtonCell}
-                            onClick={() => toggleLock(dateKey, stall)}
-                          >
-                            {record.locked ? "鎖定" : "開放"}
-                          </button>
-                        </div>
-                        <div style={styles.cellBody}>
-                          {vendor ? (
-                            <>
-                              <div style={styles.vendorName}>{vendor.stallName}</div>
-                              <div style={styles.vendorInfoSmall}>{vendor.contactName}</div>
-                            </>
-                          ) : (
-                            <div style={styles.emptyText}>拖曳攤販到此</div>
-                          )}
-                        </div>
+                        <div style={styles.stallId}>{stall}</div>
+                        <div style={styles.stallStatus}>{statusLabel(record.status, record.locked)}</div>
                       </div>
                     );
                   })}
-                </>
-              ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={styles.bottomSection}>
+        <div style={styles.bottomHeader}>
+          <h2 style={styles.sectionTitle}>攤販列表</h2>
+          <div style={styles.dragHint}>{dragMessage || "長按攤販後拖到上方日期格"}</div>
+        </div>
+        <div style={styles.vendorBottomList}>
+          {vendors.map((vendor) => (
+            <div
+              key={vendor.id}
+              draggable
+              onDragStart={(event) => event.dataTransfer.setData("text/plain", vendor.id)}
+              onTouchStart={(event) => handleVendorTouchStart(vendor.id, event)}
+              onTouchMove={handleVendorTouchMove}
+              onTouchEnd={handleVendorTouchEnd}
+              onTouchCancel={handleVendorTouchEnd}
+              style={{
+                ...styles.vendorCardHorizontal,
+                opacity: mobileDragVendorId === vendor.id ? 0.6 : 1,
+              }}
+            >
+              <div style={styles.avatar}>{vendor.contactName.charAt(0)}</div>
+              <div style={styles.vendorMeta}>
+                <div style={styles.vendorTitle}>{vendor.stallName}</div>
+                <div style={styles.vendorInfo}>{vendor.product}</div>
+                <div style={styles.vendorInfo}>{vendor.phone}</div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       </div>
     </div>
@@ -467,187 +554,175 @@ function App() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    padding: "14px",
-    background: "#f3f6fb",
+    display: "flex",
+    flexDirection: "column",
+    background: "#eef2ff",
+    padding: "12px",
+    boxSizing: "border-box",
     fontFamily: "Arial, sans-serif",
   },
   title: {
     margin: 0,
-    marginBottom: "16px",
-    fontSize: "30px",
+    fontSize: "26px",
     textAlign: "center",
-    color: "#1f2937",
+    color: "#1e293b",
+    marginBottom: "12px",
   },
   topButtons: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: "10px",
-    marginBottom: "16px",
+    marginBottom: "12px",
   },
   primaryButton: {
-    height: "52px",
+    height: "48px",
     borderRadius: "14px",
     border: "none",
-    background: "#1976d2",
+    background: "#2563eb",
     color: "white",
-    fontSize: "18px",
-    fontWeight: "700",
+    fontSize: "16px",
+    fontWeight: 700,
   },
   secondaryButton: {
-    height: "52px",
+    height: "48px",
     borderRadius: "14px",
     border: "none",
-    background: "#455a64",
+    background: "#475569",
     color: "white",
-    fontSize: "18px",
-    fontWeight: "700",
+    fontSize: "16px",
+    fontWeight: 700,
   },
   activeNavButton: {
     opacity: 0.95,
   },
-  infoCard: {
-    padding: "14px",
-    marginBottom: "16px",
-    borderRadius: "18px",
-    border: "1px solid #d1d5db",
-    background: "#ffffff",
-    color: "#334155",
-    fontSize: "16px",
+  topSection: {
+    flex: 2,
+    overflowY: "auto",
+    paddingRight: "4px",
+    marginBottom: "12px",
+  },
+  calendarHeader: {
     display: "grid",
+    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+    gap: "4px",
+    marginBottom: "8px",
+  },
+  weekdayCell: {
+    textAlign: "center",
+    padding: "8px 0",
+    borderRadius: "12px",
+    background: "#4338ca",
+    color: "white",
+    fontWeight: 700,
+    fontSize: "14px",
+  },
+  dateGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
     gap: "8px",
   },
-  dashboardGrid: {
-    display: "grid",
-    gridTemplateColumns: "320px 1fr",
-    gap: "16px",
-  },
-  vendorPanel: {
-    display: "grid",
-    gap: "12px",
-  },
-  boardPanel: {
-    display: "grid",
-    gap: "12px",
-  },
-  sectionTitle: {
-    margin: 0,
-    marginBottom: "8px",
-    fontSize: "22px",
-    color: "#0f172a",
-  },
-  vendorList: {
-    display: "grid",
-    gap: "12px",
-  },
-  vendorCard: {
+  dateCard: {
     background: "white",
-    borderRadius: "16px",
-    border: "1px solid #d1d5db",
-    padding: "12px",
-    cursor: "grab",
-    boxShadow: "0 1px 2px rgba(15,23,42,0.08)",
-  },
-  vendorTitle: {
-    fontSize: "18px",
-    fontWeight: 700,
-    marginBottom: "6px",
-  },
-  vendorInfo: {
-    fontSize: "14px",
-    color: "#475569",
-  },
-  boardWrapper: {
-    overflowX: "auto",
-  },
-  boardGrid: {
-    display: "grid",
-    gridTemplateColumns: `120px repeat(21, minmax(180px, 1fr))`,
-    gap: "4px",
-    alignItems: "stretch",
-  },
-  headerCell: {
-    padding: "10px 8px",
-    minWidth: "100px",
-    borderRadius: "12px",
-    background: "#1d4ed8",
-    color: "white",
-    textAlign: "center",
-    fontSize: "14px",
-    fontWeight: 700,
-  },
-  headerDate: {
-    fontSize: "16px",
-  },
-  headerWeekday: {
-    opacity: 0.85,
-  },
-  stallLabel: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "120px",
-    borderRadius: "12px",
-    background: "#e2e8f0",
-    fontWeight: 700,
-    color: "#0f172a",
-    fontSize: "16px",
-  },
-  cell: {
-    minHeight: "120px",
-    borderRadius: "12px",
-    border: "1px solid #ccc",
+    borderRadius: "18px",
     padding: "10px",
+    boxShadow: "0 1px 4px rgba(15,23,42,0.08)",
+    minHeight: "154px",
     display: "flex",
     flexDirection: "column",
-    justifyContent: "space-between",
+    gap: "8px",
+  },
+  dateTitle: {
+    fontSize: "15px",
+    fontWeight: 700,
+    color: "#0f172a",
+  },
+  stallGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "6px",
+    flex: 1,
+  },
+  stallCell: {
+    minHeight: "52px",
+    borderRadius: "14px",
+    border: "1px solid #cbd5e1",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: "6px",
+    gap: "4px",
+    userSelect: "none",
+    touchAction: "manipulation",
+  },
+  stallId: {
+    fontSize: "14px",
+    fontWeight: 700,
+    color: "#1f2937",
+  },
+  stallStatus: {
+    fontSize: "13px",
+    color: "#334155",
+  },
+  bottomSection: {
+    flex: 1,
+    minHeight: "180px",
+    display: "flex",
+    flexDirection: "column",
     gap: "10px",
   },
-  cellHeader: {
+  bottomHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "10px",
+  },
+  dragHint: {
+    color: "#475569",
+    fontSize: "14px",
+    textAlign: "right",
+    flex: 1,
+  },
+  vendorBottomList: {
+    display: "grid",
+    gap: "10px",
+    overflowY: "auto",
+    paddingRight: "4px",
+  },
+  vendorCardHorizontal: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    flexWrap: "wrap",
-  },
-  cellStatus: {
-    fontSize: "14px",
-    fontWeight: 700,
-    color: "#1e293b",
-  },
-  smallButton: {
-    borderRadius: "12px",
-    border: "1px solid #94a3b8",
     background: "white",
-    padding: "4px 8px",
-    fontSize: "12px",
-    cursor: "pointer",
+    borderRadius: "18px",
+    padding: "12px",
+    border: "1px solid #cbd5e1",
+    boxShadow: "0 1px 3px rgba(15,23,42,0.08)",
+    gap: "12px",
+    touchAction: "manipulation",
   },
-  lockButtonCell: {
-    borderRadius: "12px",
-    border: "1px solid #94a3b8",
-    background: "#f8fafc",
-    padding: "4px 8px",
-    fontSize: "12px",
-    cursor: "pointer",
-  },
-  cellBody: {
-    flexGrow: 1,
+  avatar: {
+    width: "52px",
+    height: "52px",
+    borderRadius: "50%",
+    background: "#2563eb",
+    color: "white",
     display: "grid",
     placeItems: "center",
-    textAlign: "center",
-    padding: "8px",
+    fontSize: "20px",
+    fontWeight: 700,
   },
-  vendorName: {
+  vendorMeta: {
+    display: "grid",
+    gap: "4px",
+  },
+  vendorTitle: {
     fontSize: "16px",
     fontWeight: 700,
-    color: "#111827",
+    color: "#0f172a",
   },
-  vendorInfoSmall: {
+  vendorInfo: {
     fontSize: "13px",
     color: "#475569",
-  },
-  emptyText: {
-    color: "#64748b",
-    fontSize: "14px",
   },
   card: {
     background: "white",
