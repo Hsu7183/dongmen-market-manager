@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 
+type Tab = "schedule" | "vendors";
 type StallId = "頭攤" | "門前" | "左1" | "中2" | "右3" | "魚攤";
 type StallStatus = "empty" | "occupied";
 
@@ -84,7 +85,7 @@ const buildScheduleDates = () => {
 };
 
 function App() {
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [currentTab, setCurrentTab] = useState<Tab>("schedule");
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     const raw = localStorage.getItem("vendors");
     const saved = raw ? (JSON.parse(raw) as Partial<Vendor>[]) : defaultVendors;
@@ -325,7 +326,6 @@ function App() {
       ...prev,
     ]);
 
-    setShowAddForm(false);
     setNewVendor({
       stallName: "",
       contactName: "",
