@@ -11,6 +11,8 @@ type Vendor = {
   phone: string;
   line: string;
   product: string;
+  gender: "男" | "女";
+  photo?: string;
   longTerm: boolean;
   weekdays: number[];
   preferredStall: StallId | "";
@@ -36,6 +38,7 @@ const defaultVendors: Vendor[] = [
     phone: "0912-000-001",
     line: "wangfruit",
     product: "水果",
+    gender: "男",
     longTerm: false,
     weekdays: [2, 4, 6],
     preferredStall: "頭攤",
@@ -47,6 +50,7 @@ const defaultVendors: Vendor[] = [
     phone: "0912-000-002",
     line: "livegetable",
     product: "青菜",
+    gender: "女",
     longTerm: false,
     weekdays: [1, 3, 5],
     preferredStall: "門前",
@@ -62,7 +66,12 @@ const emptyDayRecords = (): DayRecords => ({
   "魚攤": { status: "empty", vendorId: "", locked: false },
 });
 
-const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
+const getDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 const formatShortDate = (date: Date) => `${date.getMonth() + 1}/${date.getDate()}`;
 
 const buildScheduleDates = () => {
@@ -79,7 +88,20 @@ function App() {
   const [currentTab, setCurrentTab] = useState<Tab>("schedule");
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     const raw = localStorage.getItem("vendors");
-    return raw ? (JSON.parse(raw) as Vendor[]) : defaultVendors;
+    const saved = raw ? (JSON.parse(raw) as Partial<Vendor>[]) : defaultVendors;
+    return saved.map((vendor) => ({
+      id: vendor.id ?? `v-${Date.now()}`,
+      stallName: vendor.stallName ?? "",
+      contactName: vendor.contactName ?? "",
+      phone: vendor.phone ?? "",
+      line: vendor.line ?? "",
+      product: vendor.product ?? "",
+      gender: vendor.gender ?? "男",
+      photo: vendor.photo ?? "",
+      longTerm: vendor.longTerm ?? false,
+      weekdays: vendor.weekdays ?? [],
+      preferredStall: vendor.preferredStall ?? "",
+    }));
   });
   const [schedule, setSchedule] = useState<ScheduleMap>(() => {
     const raw = localStorage.getItem("schedule");
@@ -91,6 +113,8 @@ function App() {
     phone: "",
     line: "",
     product: "",
+    gender: "男" as "男" | "女",
+    photo: "",
     longTerm: false,
     weekdays: [] as number[],
     preferredStall: "" as StallId | "",
@@ -98,6 +122,7 @@ function App() {
   const [mobileDragVendorId, setMobileDragVendorId] = useState<string | null>(null);
   const [dragOverCell, setDragOverCell] = useState<{ dateKey: string; stall: StallId } | null>(null);
   const [dragMessage, setDragMessage] = useState<string | null>(null);
+  const [activeVendorActions, setActiveVendorActions] = useState<string | null>(null);
 
   const touchDragTimerRef = useRef<number | null>(null);
   const touchStartPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -111,6 +136,7 @@ function App() {
   }, [schedule]);
 
   const scheduleDates = useMemo(() => buildScheduleDates(), []);
+  const scheduleMonthLabel = `${scheduleDates[0].getFullYear()}年${scheduleDates[0].getMonth() + 1}月`;
   const vendorMap = useMemo(
     () =>
       vendors.reduce((map, vendor) => {
@@ -119,6 +145,18 @@ function App() {
       }, {} as Record<string, Vendor>),
     [vendors]
   );
+  const rentDays = useMemo(() => {
+    const counts: Record<string, number> = {};
+    Object.values(schedule).forEach((dayRecords) => {
+      STALLS.forEach((stall) => {
+        const record = dayRecords[stall];
+        if (record.vendorId) {
+          counts[record.vendorId] = (counts[record.vendorId] ?? 0) + 1;
+        }
+      });
+    });
+    return counts;
+  }, [schedule]);
 
   const updateStall = (dateKey: string, stall: StallId, patch: Partial<StallRecord>) => {
     setSchedule((prev) => {
@@ -189,6 +227,18 @@ function App() {
     }
   };
 
+  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setNewVendor((prev) => ({ ...prev, photo: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleMobileDrop = (dateKey: string, stall: StallId, vendorId: string) => {
     const current = schedule[dateKey] ?? emptyDayRecords();
     if (current[stall].locked) return;
@@ -254,14 +304,11 @@ function App() {
     const current = schedule[dateKey] ?? emptyDayRecords();
     const record = current[stall];
     if (record.locked) {
-      // Unlock
       updateStall(dateKey, stall, {
         status: "empty",
         vendorId: "",
         locked: false,
       });
-    } else {
-      // Do nothing for empty stalls
     }
   };
 
@@ -285,6 +332,8 @@ function App() {
       phone: "",
       line: "",
       product: "",
+      gender: "男",
+      photo: "",
       longTerm: false,
       weekdays: [],
       preferredStall: "",
@@ -338,6 +387,28 @@ function App() {
               value={newVendor.product}
               onChange={(e) => setNewVendor({ ...newVendor, product: e.target.value })}
             />
+            <div style={styles.fieldRow}>
+              <label style={styles.fieldLabel}>
+                性別
+                <select
+                  style={styles.select}
+                  value={newVendor.gender}
+                  onChange={(e) => setNewVendor({ ...newVendor, gender: e.target.value as "男" | "女" })}
+                >
+                  <option value="男">男</option>
+                  <option value="女">女</option>
+                </select>
+              </label>
+              <label style={styles.fieldLabel}>
+                照片
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={styles.fileInput}
+                  onChange={handlePhotoChange}
+                />
+              </label>
+            </div>
             <div style={styles.checkboxRow}>
               <label style={styles.checkboxLabel}>
                 <input
@@ -403,14 +474,31 @@ function App() {
             <button style={styles.primaryButton} onClick={addVendor}>新增攤販</button>
           </div>
 
-          {vendors.map((vendor) => (
-            <div key={vendor.id} style={styles.vendorCard}>
-              <div style={styles.vendorTitle}>{vendor.stallName}</div>
-              <div style={styles.vendorInfo}>{vendor.contactName}</div>
-              <div style={styles.vendorInfo}>{vendor.product}</div>
-              <div style={styles.vendorInfo}>{vendor.phone}</div>
-            </div>
-          ))}
+          {vendors.map((vendor) => {
+            const cardBg = vendor.photo ? "transparent" : vendor.gender === "女" ? "#ffd6e7" : "#d0e8ff";
+            return (
+              <div key={vendor.id} style={styles.vendorCardCompact}>
+                <div style={styles.vendorCardRow}>
+                  <div style={{ ...styles.avatar, background: cardBg }}>
+                    {vendor.photo ? (
+                      <img src={vendor.photo} alt="avatar" style={styles.avatarImage} />
+                    ) : (
+                      <span style={{ color: vendor.gender === "女" ? "#c2006e" : "#0d47a1" }}>
+                        {vendor.contactName.charAt(0)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={styles.vendorMetaCompact}>
+                    <div style={styles.vendorTitle}>{vendor.stallName}</div>
+                    <div style={styles.vendorInfo}>{vendor.contactName}</div>
+                    <div style={styles.vendorInfo}>{vendor.product}</div>
+                    <div style={styles.vendorInfo}>{vendor.phone}</div>
+                  </div>
+                </div>
+                <div style={styles.rentDays}>已租天數：{rentDays[vendor.id] ?? 0} 天</div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -431,6 +519,7 @@ function App() {
       </div>
 
       <div style={styles.content}>
+        <div style={styles.monthTitle}>{scheduleMonthLabel}</div>
         <div style={styles.calendarHeader}>
           {WEEKDAYS.map((day) => (
             <div key={day} style={styles.weekdayCell}>{day}</div>
@@ -460,20 +549,22 @@ function App() {
                           ...styles.stallCell,
                           background: record.status === "occupied" ? "#d1fae5" : "#ffffff",
                           borderColor: isDragOver ? "#007aff" : "#e5e5ea",
-                          opacity: record.locked ? 0.9 : 1,
+                          opacity: record.locked ? 0.95 : 1,
                         }}
                         onDragOver={(event) => event.preventDefault()}
                         onDrop={(event) => handleDesktopDrop(event, dateKey, stall)}
                         onClick={() => handleStallClick(dateKey, stall)}
                       >
+                        <div style={styles.stallName}>{stall}</div>
                         {record.status === "occupied" && vendor ? (
                           <>
-                            <div style={styles.vendorAvatarSmall}>{vendor.contactName.charAt(0)}</div>
+                            <div style={styles.vendorAvatarLarge}>{vendor.contactName.charAt(0)}</div>
                             <div style={styles.vendorNameSmall}>{vendor.stallName}</div>
                             <div style={styles.lockIcon}>🔒</div>
+                            <div style={styles.stallStatusText}>已排</div>
                           </>
                         ) : (
-                          <div style={styles.emptyText}>空</div>
+                          <div style={styles.stallStatusText}>空</div>
                         )}
                       </div>
                     );
@@ -488,29 +579,63 @@ function App() {
           <div style={styles.sectionTitle}>攤販列表</div>
           <div style={styles.dragHint}>{dragMessage || "長按攤販卡片開始拖曳"}</div>
           <div style={styles.vendorList}>
-            {vendors.map((vendor) => (
-              <div
-                key={vendor.id}
-                draggable
-                onDragStart={(event) => event.dataTransfer.setData("text/plain", vendor.id)}
-                onTouchStart={(event) => handleVendorTouchStart(vendor.id, event)}
-                onTouchMove={handleVendorTouchMove}
-                onTouchEnd={handleVendorTouchEnd}
-                onTouchCancel={handleVendorTouchEnd}
-                style={{
-                  ...styles.vendorCardHorizontal,
-                  opacity: mobileDragVendorId === vendor.id ? 0.6 : 1,
-                }}
-              >
-                <div style={styles.avatar}>{vendor.contactName.charAt(0)}</div>
-                <div style={styles.vendorMeta}>
-                  <div style={styles.vendorTitle}>{vendor.stallName}</div>
-                  <div style={styles.vendorInfo}>{vendor.contactName}</div>
-                  <div style={styles.vendorInfo}>{vendor.product}</div>
-                  <div style={styles.vendorInfo}>{vendor.phone}</div>
+            {vendors.map((vendor) => {
+              const isActive = activeVendorActions === vendor.id;
+              const activeBg = vendor.photo ? "transparent" : vendor.gender === "女" ? "#ffd6e7" : "#d0e8ff";
+              return (
+                <div
+                  key={vendor.id}
+                  draggable
+                  onDragStart={(event) => event.dataTransfer.setData("text/plain", vendor.id)}
+                  onTouchStart={(event) => handleVendorTouchStart(vendor.id, event)}
+                  onTouchMove={handleVendorTouchMove}
+                  onTouchEnd={handleVendorTouchEnd}
+                  onTouchCancel={handleVendorTouchEnd}
+                  onClick={() => setActiveVendorActions(isActive ? null : vendor.id)}
+                  style={{
+                    ...styles.vendorCardCompact,
+                    opacity: mobileDragVendorId === vendor.id ? 0.6 : 1,
+                  }}
+                >
+                  <div style={styles.vendorCardRow}>
+                    <div style={{ ...styles.avatar, background: activeBg }}>
+                      {vendor.photo ? (
+                        <img src={vendor.photo} alt="avatar" style={styles.avatarImage} />
+                      ) : (
+                        <span style={{ color: vendor.gender === "女" ? "#c2006e" : "#0d47a1" }}>
+                          {vendor.contactName.charAt(0)}
+                        </span>
+                      )}
+                    </div>
+                    <div style={styles.vendorMetaCompact}>
+                      <div style={styles.vendorTitle}>{vendor.stallName}</div>
+                      <div style={styles.vendorInfo}>{vendor.contactName}</div>
+                      <div style={styles.vendorInfo}>{vendor.product}</div>
+                      <div style={styles.vendorInfo}>{vendor.phone}</div>
+                    </div>
+                  </div>
+                  <div style={styles.rentDays}>已租天數：{rentDays[vendor.id] ?? 0} 天</div>
+                  {isActive ? (
+                    <div style={styles.quickActions}>
+                      <button
+                        type="button"
+                        style={styles.quickActionButton}
+                        onClick={() => (window.location.href = `tel:${vendor.phone}`)}
+                      >
+                        📞
+                      </button>
+                      <button
+                        type="button"
+                        style={styles.quickActionButton}
+                        onClick={() => alert(vendor.line ? `LINE ID：${vendor.line}` : "沒有 LINE ID")}
+                      >
+                        💬
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -527,27 +652,28 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
   },
   tabBar: {
-    display: "flex",
-    background: "#ffffff",
-    borderBottom: "1px solid #e5e5ea",
-    padding: "0 16px",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "8px",
+    padding: "12px",
+    background: "#f8f9fb",
   },
   tabButton: {
-    flex: 1,
-    padding: "16px 0",
+    padding: "14px 0",
+    borderRadius: "16px",
     border: "none",
-    background: "none",
     fontSize: "16px",
-    fontWeight: 600,
-    color: "#8e8e93",
+    fontWeight: 700,
     cursor: "pointer",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
   },
   activeTab: {
     color: "#007aff",
-    borderBottom: "2px solid #007aff",
+    background: "#ebf4ff",
   },
   inactiveTab: {
-    color: "#8e8e93",
+    color: "#6b7280",
+    background: "#f2f2f7",
   },
   content: {
     flex: 1,
@@ -585,6 +711,100 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "8px",
+  },
+  monthTitle: {
+    fontSize: "18px",
+    fontWeight: 700,
+    color: "#1c1c1e",
+    marginBottom: "10px",
+  },
+  stallName: {
+    fontSize: "13px",
+    color: "#475569",
+    fontWeight: 700,
+  },
+  stallStatusText: {
+    fontSize: "13px",
+    color: "#1c1c1e",
+    fontWeight: 600,
+  },
+  vendorAvatarLarge: {
+    width: "36px",
+    height: "36px",
+    borderRadius: "50%",
+    background: "#007aff",
+    color: "white",
+    display: "grid",
+    placeItems: "center",
+    fontSize: "16px",
+    fontWeight: 700,
+  },
+  fieldRow: {
+    display: "grid",
+    gap: "12px",
+    marginBottom: "12px",
+  },
+  fieldLabel: {
+    display: "grid",
+    gap: "8px",
+    fontSize: "14px",
+    color: "#1c1c1e",
+  },
+  select: {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: "12px",
+    border: "1px solid #d1d1d6",
+    fontSize: "15px",
+    background: "#fafafa",
+  },
+  fileInput: {
+    width: "100%",
+    padding: "10px 0",
+    fontSize: "14px",
+  },
+  vendorCardCompact: {
+    background: "#ffffff",
+    borderRadius: "16px",
+    border: "1px solid #e5e5ea",
+    padding: "14px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  vendorCardRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
+  vendorMetaCompact: {
+    display: "grid",
+    gap: "4px",
+  },
+  rentDays: {
+    color: "#6b7280",
+    fontSize: "13px",
+  },
+  quickActions: {
+    display: "flex",
+    gap: "10px",
+    marginTop: "8px",
+  },
+  quickActionButton: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "50%",
+    border: "none",
+    background: "#f2f2f7",
+    fontSize: "18px",
+    cursor: "pointer",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    borderRadius: "50%",
   },
   dateTitle: {
     fontSize: "16px",
