@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 
-type Tab = "schedule" | "vendors";
 type StallId = "頭攤" | "門前" | "左1" | "中2" | "右3" | "魚攤";
 type StallStatus = "empty" | "occupied";
 
@@ -72,7 +71,7 @@ const getDateKey = (date: Date) => {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
-const formatShortDate = (date: Date) => `${date.getMonth() + 1}/${date.getDate()}`;
+const formatShortDate = (date: Date) => `${date.getDate()}`;
 
 const buildScheduleDates = () => {
   const today = new Date();
@@ -85,7 +84,7 @@ const buildScheduleDates = () => {
 };
 
 function App() {
-  const [currentTab, setCurrentTab] = useState<Tab>("schedule");
+  const [showAddForm, setShowAddForm] = useState(false);
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     const raw = localStorage.getItem("vendors");
     const saved = raw ? (JSON.parse(raw) as Partial<Vendor>[]) : defaultVendors;
@@ -136,6 +135,7 @@ function App() {
   }, [schedule]);
 
   const scheduleDates = useMemo(() => buildScheduleDates(), []);
+  const firstWeekday = scheduleDates[0].getDay();
   const scheduleMonthLabel = `${scheduleDates[0].getFullYear()}年${scheduleDates[0].getMonth() + 1}月`;
   const vendorMap = useMemo(
     () =>
@@ -340,304 +340,275 @@ function App() {
     });
   };
 
-  if (currentTab === "vendors") {
-    return (
-      <div style={styles.page}>
-        <div style={styles.tabBar}>
-          <button
-            style={{ ...styles.tabButton, ...styles.inactiveTab }}
-            onClick={() => setCurrentTab("schedule")}
-          >
-            攤販班表
-          </button>
-          <button style={{ ...styles.tabButton, ...styles.activeTab }}>
-            攤販名單
-          </button>
-        </div>
-
-        <div style={styles.content}>
-          <div style={styles.card}>
-            <input
-              style={styles.input}
-              placeholder="攤販名稱"
-              value={newVendor.stallName}
-              onChange={(e) => setNewVendor({ ...newVendor, stallName: e.target.value })}
-            />
-            <input
-              style={styles.input}
-              placeholder="聯絡人"
-              value={newVendor.contactName}
-              onChange={(e) => setNewVendor({ ...newVendor, contactName: e.target.value })}
-            />
-            <input
-              style={styles.input}
-              placeholder="手機"
-              value={newVendor.phone}
-              onChange={(e) => setNewVendor({ ...newVendor, phone: e.target.value })}
-            />
-            <input
-              style={styles.input}
-              placeholder="LINE"
-              value={newVendor.line}
-              onChange={(e) => setNewVendor({ ...newVendor, line: e.target.value })}
-            />
-            <input
-              style={styles.input}
-              placeholder="賣什麼"
-              value={newVendor.product}
-              onChange={(e) => setNewVendor({ ...newVendor, product: e.target.value })}
-            />
-            <div style={styles.fieldRow}>
-              <label style={styles.fieldLabel}>
-                性別
-                <select
-                  style={styles.select}
-                  value={newVendor.gender}
-                  onChange={(e) => setNewVendor({ ...newVendor, gender: e.target.value as "男" | "女" })}
-                >
-                  <option value="男">男</option>
-                  <option value="女">女</option>
-                </select>
-              </label>
-              <label style={styles.fieldLabel}>
-                照片
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={styles.fileInput}
-                  onChange={handlePhotoChange}
-                />
-              </label>
-            </div>
-            <div style={styles.checkboxRow}>
-              <label style={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={newVendor.longTerm}
-                  onChange={(e) => setNewVendor({ ...newVendor, longTerm: e.target.checked })}
-                />
-                長租攤位
-              </label>
-            </div>
-            <div style={styles.toggleGroup}>
-              <div style={styles.toggleLabel}>常用星期</div>
-              <div style={styles.toggleRow}>
-                {WEEKDAYS.map((day, index) => {
-                  const active = newVendor.weekdays.includes(index);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      style={{
-                        ...styles.toggleButton,
-                        background: active ? "#007aff" : "#f2f2f7",
-                        color: active ? "#fff" : "#333",
-                        border: active ? "1px solid #007aff" : "1px solid #c7c7cc",
-                      }}
-                      onClick={() => {
-                        const next = newVendor.weekdays.includes(index)
-                          ? newVendor.weekdays.filter((w) => w !== index)
-                          : [...newVendor.weekdays, index];
-                        setNewVendor({ ...newVendor, weekdays: next });
-                      }}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={styles.toggleGroup}>
-              <div style={styles.toggleLabel}>常用攤位</div>
-              <div style={styles.toggleRow}>
-                {STALLS.map((stall) => {
-                  const active = newVendor.preferredStall === stall;
-                  return (
-                    <button
-                      key={stall}
-                      type="button"
-                      style={{
-                        ...styles.toggleButton,
-                        minWidth: "64px",
-                        background: active ? "#007aff" : "#f2f2f7",
-                        color: active ? "#fff" : "#333",
-                        border: active ? "1px solid #007aff" : "1px solid #c7c7cc",
-                      }}
-                      onClick={() => setNewVendor({ ...newVendor, preferredStall: stall })}
-                    >
-                      {stall}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <button style={styles.primaryButton} onClick={addVendor}>新增攤販</button>
-          </div>
-
-          {vendors.map((vendor) => {
-            const cardBg = vendor.photo ? "transparent" : vendor.gender === "女" ? "#ffd6e7" : "#d0e8ff";
-            return (
-              <div key={vendor.id} style={styles.vendorCardCompact}>
-                <div style={styles.vendorCardRow}>
-                  <div style={{ ...styles.avatar, background: cardBg }}>
-                    {vendor.photo ? (
-                      <img src={vendor.photo} alt="avatar" style={styles.avatarImage} />
-                    ) : (
-                      <span style={{ color: vendor.gender === "女" ? "#c2006e" : "#0d47a1" }}>
-                        {vendor.contactName.charAt(0)}
-                      </span>
-                    )}
-                  </div>
-                  <div style={styles.vendorMetaCompact}>
-                    <div style={styles.vendorTitle}>{vendor.stallName}</div>
-                    <div style={styles.vendorInfo}>{vendor.contactName}</div>
-                    <div style={styles.vendorInfo}>{vendor.product}</div>
-                    <div style={styles.vendorInfo}>{vendor.phone}</div>
-                  </div>
-                </div>
-                <div style={styles.rentDays}>已租天數：{rentDays[vendor.id] ?? 0} 天</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={styles.page}>
-      <div style={styles.tabBar}>
-        <button style={{ ...styles.tabButton, ...styles.activeTab }}>
-          攤販班表
-        </button>
-        <button
-          style={{ ...styles.tabButton, ...styles.inactiveTab }}
-          onClick={() => setCurrentTab("vendors")}
-        >
-          攤販名單
-        </button>
-      </div>
+      <div style={styles.mainLayout}>
+        <main style={styles.mainPanel}>
+          <div style={styles.calendarHeaderSection}>
+            <div style={styles.monthTitle}>{scheduleMonthLabel}</div>
+            <div style={styles.calendarSubtitle}>攤位排班</div>
+          </div>
 
-      <div style={styles.content}>
-        <div style={styles.monthTitle}>{scheduleMonthLabel}</div>
-        <div style={styles.calendarHeader}>
-          {WEEKDAYS.map((day) => (
-            <div key={day} style={styles.weekdayCell}>{day}</div>
-          ))}
-        </div>
+          <div style={styles.calendarHeader}>
+            {WEEKDAYS.map((day) => (
+              <div key={day} style={styles.weekdayCell}>{day}</div>
+            ))}
+          </div>
 
-        <div style={styles.dateGrid}>
-          {scheduleDates.map((date) => {
-            const dateKey = getDateKey(date);
-            const dayRecords = schedule[dateKey] ?? emptyDayRecords();
-            return (
-              <div key={dateKey} style={styles.dateCard}>
-                <div style={styles.dateTitle}>{formatShortDate(date)}</div>
-                <div style={styles.stallGrid}>
-                  {STALLS.map((stall) => {
-                    const record = dayRecords[stall];
-                    const vendor = vendorMap[record.vendorId];
-                    const isDragOver =
-                      dragOverCell?.dateKey === dateKey && dragOverCell?.stall === stall;
-                    return (
-                      <div
-                        key={stall}
-                        data-drop-cell
-                        data-date-key={dateKey}
-                        data-stall={stall}
-                        style={{
-                          ...styles.stallCell,
-                          background: record.status === "occupied" ? "#d1fae5" : "#ffffff",
-                          borderColor: isDragOver ? "#007aff" : "#e5e5ea",
-                          opacity: record.locked ? 0.95 : 1,
-                        }}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={(event) => handleDesktopDrop(event, dateKey, stall)}
-                        onClick={() => handleStallClick(dateKey, stall)}
-                      >
-                        <div style={styles.stallName}>{stall}</div>
-                        {record.status === "occupied" && vendor ? (
-                          <>
-                            <div style={styles.vendorAvatarLarge}>{vendor.contactName.charAt(0)}</div>
-                            <div style={styles.vendorNameSmall}>{vendor.stallName}</div>
-                            <div style={styles.lockIcon}>🔒</div>
-                            <div style={styles.stallStatusText}>已排</div>
-                          </>
-                        ) : (
-                          <div style={styles.stallStatusText}>空</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={styles.vendorSection}>
-          <div style={styles.sectionTitle}>攤販列表</div>
-          <div style={styles.dragHint}>{dragMessage || "長按攤販卡片開始拖曳"}</div>
-          <div style={styles.vendorList}>
-            {vendors.map((vendor) => {
-              const isActive = activeVendorActions === vendor.id;
-              const activeBg = vendor.photo ? "transparent" : vendor.gender === "女" ? "#ffd6e7" : "#d0e8ff";
+          <div style={styles.dateGrid}>
+            {Array.from({ length: firstWeekday }).map((_, index) => (
+              <div key={`blank-${index}`} style={styles.blankDateCard} />
+            ))}
+            {scheduleDates.map((date) => {
+              const dateKey = getDateKey(date);
+              const dayRecords = schedule[dateKey] ?? emptyDayRecords();
               return (
-                <div
-                  key={vendor.id}
-                  draggable
-                  onDragStart={(event) => event.dataTransfer.setData("text/plain", vendor.id)}
-                  onTouchStart={(event) => handleVendorTouchStart(vendor.id, event)}
-                  onTouchMove={handleVendorTouchMove}
-                  onTouchEnd={handleVendorTouchEnd}
-                  onTouchCancel={handleVendorTouchEnd}
-                  onClick={() => setActiveVendorActions(isActive ? null : vendor.id)}
-                  style={{
-                    ...styles.vendorCardCompact,
-                    opacity: mobileDragVendorId === vendor.id ? 0.6 : 1,
-                  }}
-                >
-                  <div style={styles.vendorCardRow}>
-                    <div style={{ ...styles.avatar, background: activeBg }}>
-                      {vendor.photo ? (
-                        <img src={vendor.photo} alt="avatar" style={styles.avatarImage} />
-                      ) : (
-                        <span style={{ color: vendor.gender === "女" ? "#c2006e" : "#0d47a1" }}>
-                          {vendor.contactName.charAt(0)}
-                        </span>
-                      )}
-                    </div>
-                    <div style={styles.vendorMetaCompact}>
-                      <div style={styles.vendorTitle}>{vendor.stallName}</div>
-                      <div style={styles.vendorInfo}>{vendor.contactName}</div>
-                      <div style={styles.vendorInfo}>{vendor.product}</div>
-                      <div style={styles.vendorInfo}>{vendor.phone}</div>
-                    </div>
+                <div key={dateKey} style={styles.dateCard}>
+                  <div style={styles.dateTitle}>{formatShortDate(date)}</div>
+                  <div style={styles.stallGrid}>
+                    {STALLS.map((stall) => {
+                      const record = dayRecords[stall];
+                      const vendor = vendorMap[record.vendorId];
+                      const isDragOver =
+                        dragOverCell?.dateKey === dateKey && dragOverCell?.stall === stall;
+                      return (
+                        <div
+                          key={stall}
+                          data-drop-cell
+                          data-date-key={dateKey}
+                          data-stall={stall}
+                          style={{
+                            ...styles.stallCell,
+                            background: record.status === "occupied" ? "#e7f7ed" : "#ffffff",
+                            borderColor: isDragOver ? "#9bbcff" : "#e8e8ef",
+                            opacity: record.locked ? 0.95 : 1,
+                          }}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => handleDesktopDrop(event, dateKey, stall)}
+                          onClick={() => handleStallClick(dateKey, stall)}
+                        >
+                          <div style={styles.stallName}>{stall}</div>
+                          {record.status === "occupied" && vendor ? (
+                            <>
+                              <div style={styles.vendorAvatarLarge}>{vendor.contactName.charAt(0)}</div>
+                              <div style={styles.vendorNameSmall}>{vendor.stallName}</div>
+                              <div style={styles.lockIcon}>🔒</div>
+                            </>
+                          ) : (
+                            <div style={styles.stallStatusText}>空</div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div style={styles.rentDays}>已租天數：{rentDays[vendor.id] ?? 0} 天</div>
-                  {isActive ? (
-                    <div style={styles.quickActions}>
-                      <button
-                        type="button"
-                        style={styles.quickActionButton}
-                        onClick={() => (window.location.href = `tel:${vendor.phone}`)}
-                      >
-                        📞
-                      </button>
-                      <button
-                        type="button"
-                        style={styles.quickActionButton}
-                        onClick={() => alert(vendor.line ? `LINE ID：${vendor.line}` : "沒有 LINE ID")}
-                      >
-                        💬
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
               );
             })}
           </div>
-        </div>
+        </main>
+
+        <aside style={styles.sidebar}>
+          <div style={styles.sidebarInner}>
+            <div style={styles.sidebarScroll}>
+              {showAddForm ? (
+                <div style={styles.card}>
+                  <div style={styles.sidebarTitle}>新增攤販</div>
+                  <input
+                    style={styles.input}
+                    placeholder="攤販名稱"
+                    value={newVendor.stallName}
+                    onChange={(e) => setNewVendor({ ...newVendor, stallName: e.target.value })}
+                  />
+                  <input
+                    style={styles.input}
+                    placeholder="聯絡人"
+                    value={newVendor.contactName}
+                    onChange={(e) => setNewVendor({ ...newVendor, contactName: e.target.value })}
+                  />
+                  <input
+                    style={styles.input}
+                    placeholder="手機"
+                    value={newVendor.phone}
+                    onChange={(e) => setNewVendor({ ...newVendor, phone: e.target.value })}
+                  />
+                  <input
+                    style={styles.input}
+                    placeholder="LINE"
+                    value={newVendor.line}
+                    onChange={(e) => setNewVendor({ ...newVendor, line: e.target.value })}
+                  />
+                  <input
+                    style={styles.input}
+                    placeholder="賣什麼"
+                    value={newVendor.product}
+                    onChange={(e) => setNewVendor({ ...newVendor, product: e.target.value })}
+                  />
+                  <div style={styles.fieldRow}>
+                    <label style={styles.fieldLabel}>
+                      性別
+                      <select
+                        style={styles.select}
+                        value={newVendor.gender}
+                        onChange={(e) => setNewVendor({ ...newVendor, gender: e.target.value as "男" | "女" })}
+                      >
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label style={styles.fieldLabel}>
+                    照片（拍照）
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      style={styles.fileInput}
+                      onChange={handlePhotoChange}
+                    />
+                  </label>
+                  <label style={styles.fieldLabel}>
+                    照片（選檔）
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={styles.fileInput}
+                      onChange={handlePhotoChange}
+                    />
+                  </label>
+                  <div style={styles.checkboxRow}>
+                    <label style={styles.checkboxLabel}>
+                      <input
+                        type="checkbox"
+                        checked={newVendor.longTerm}
+                        onChange={(e) => setNewVendor({ ...newVendor, longTerm: e.target.checked })}
+                      />
+                      長租攤位
+                    </label>
+                  </div>
+                  <div style={styles.toggleGroup}>
+                    <div style={styles.toggleLabel}>常用星期</div>
+                    <div style={styles.toggleRow}>
+                      {WEEKDAYS.map((day, index) => {
+                        const active = newVendor.weekdays.includes(index);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            style={{
+                              ...styles.toggleButton,
+                              background: active ? "#007aff" : "#f2f2f7",
+                              color: active ? "#fff" : "#333",
+                              border: active ? "1px solid #007aff" : "1px solid #c7c7cc",
+                            }}
+                            onClick={() => {
+                              const next = newVendor.weekdays.includes(index)
+                                ? newVendor.weekdays.filter((w) => w !== index)
+                                : [...newVendor.weekdays, index];
+                              setNewVendor({ ...newVendor, weekdays: next });
+                            }}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div style={styles.toggleGroup}>
+                    <div style={styles.toggleLabel}>常用攤位</div>
+                    <div style={styles.toggleRow}>
+                      {STALLS.map((stall) => {
+                        const active = newVendor.preferredStall === stall;
+                        return (
+                          <button
+                            key={stall}
+                            type="button"
+                            style={{
+                              ...styles.toggleButton,
+                              minWidth: "64px",
+                              background: active ? "#007aff" : "#f2f2f7",
+                              color: active ? "#fff" : "#333",
+                              border: active ? "1px solid #007aff" : "1px solid #c7c7cc",
+                            }}
+                            onClick={() => setNewVendor({ ...newVendor, preferredStall: stall })}
+                          >
+                            {stall}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <button style={styles.primaryButton} onClick={addVendor}>新增攤販</button>
+                </div>
+              ) : (
+                <div style={styles.sidebarSection}>
+                  <div style={styles.sidebarTitle}>攤販工具列</div>
+                  <div style={styles.dragHint}>{dragMessage || "長按攤販卡片開始拖曳"}</div>
+                  <div style={styles.vendorList}>
+                    {vendors.map((vendor) => {
+                      const isActive = activeVendorActions === vendor.id;
+                      const activeBg = vendor.photo ? "transparent" : vendor.gender === "女" ? "#ffd6e7" : "#d0e8ff";
+                      return (
+                        <div key={vendor.id} style={styles.sidebarVendorBlock}>
+                          <div
+                            draggable
+                            onDragStart={(event) => event.dataTransfer.setData("text/plain", vendor.id)}
+                            onTouchStart={(event) => handleVendorTouchStart(vendor.id, event)}
+                            onTouchMove={handleVendorTouchMove}
+                            onTouchEnd={handleVendorTouchEnd}
+                            onTouchCancel={handleVendorTouchEnd}
+                            onClick={() => setActiveVendorActions(isActive ? null : vendor.id)}
+                            style={{
+                              ...styles.vendorToolCard,
+                              background: isActive ? "#f2f8ff" : "#ffffff",
+                            }}
+                          >
+                            <div style={{ ...styles.avatar, width: "36px", height: "36px", fontSize: "16px" , background: activeBg }}>
+                              {vendor.photo ? (
+                                <img src={vendor.photo} alt="avatar" style={styles.avatarImage} />
+                              ) : (
+                                <span style={{ color: vendor.gender === "女" ? "#c2006e" : "#0d47a1" }}>
+                                  {vendor.contactName.charAt(0)}
+                                </span>
+                              )}
+                            </div>
+                            <div style={styles.vendorToolMeta}>{vendor.stallName}</div>
+                          </div>
+                          {isActive ? (
+                            <div style={styles.vendorQuickActions}>
+                              <button
+                                type="button"
+                                style={styles.quickActionButton}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  window.location.href = `tel:${vendor.phone}`;
+                                }}
+                              >
+                                📞
+                              </button>
+                              <button
+                                type="button"
+                                style={styles.quickActionButton}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  alert(vendor.line ? `LINE ID：${vendor.line}` : "沒有 LINE ID");
+                                }}
+                              >
+                                💬
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button style={styles.addButton} onClick={() => setShowAddForm((prev) => !prev)}>
+              {showAddForm ? "← 返回" : "+ 新增"}
+            </button>
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -647,76 +618,144 @@ const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
     display: "flex",
-    flexDirection: "column",
-    background: "#f2f2f7",
+    flexDirection: "row",
+    gap: "18px",
+    padding: "18px",
+    background: "#f4f5f7",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
   },
-  tabBar: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "8px",
-    padding: "12px",
-    background: "#f8f9fb",
+  mainLayout: {
+    flex: 7,
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "18px",
   },
-  tabButton: {
-    padding: "14px 0",
-    borderRadius: "16px",
-    border: "none",
+  mainPanel: {
+    flex: 1,
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "18px",
+    overflow: "hidden",
+  },
+  sidebar: {
+    flex: 1,
+    maxWidth: "280px",
+    minWidth: "220px",
+    display: "flex",
+    flexDirection: "column",
+    height: "calc(100vh - 36px)",
+  },
+  sidebarInner: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    background: "#ffffff",
+    borderRadius: "28px",
+    padding: "18px",
+    boxShadow: "0 20px 40px rgba(15,15,15,0.06)",
+    overflow: "hidden",
+  },
+  sidebarScroll: {
+    flex: 1,
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
+    paddingRight: "2px",
+  },
+  sidebarSection: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  sidebarTitle: {
     fontSize: "16px",
     fontWeight: 700,
-    cursor: "pointer",
-    boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
+    color: "#1c1c1e",
   },
-  activeTab: {
-    color: "#007aff",
-    background: "#ebf4ff",
+  calendarHeaderSection: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: "12px",
   },
-  inactiveTab: {
+  calendarSubtitle: {
     color: "#6b7280",
-    background: "#f2f2f7",
-  },
-  content: {
-    flex: 1,
-    padding: "16px",
-    overflowY: "auto",
+    fontSize: "14px",
   },
   calendarHeader: {
     display: "grid",
     gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-    gap: "4px",
-    marginBottom: "12px",
+    gap: "6px",
   },
   weekdayCell: {
     textAlign: "center",
     padding: "12px 0",
-    borderRadius: "12px",
+    borderRadius: "14px",
     background: "#ffffff",
-    color: "#1c1c1e",
-    fontWeight: 600,
-    fontSize: "14px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+    color: "#334155",
+    fontWeight: 700,
+    fontSize: "13px",
+    boxShadow: "0 1px 2px rgba(15,23,42,0.08)",
   },
   dateGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
     gap: "8px",
-    marginBottom: "20px",
+    overflowY: "auto",
+    paddingBottom: "12px",
+  },
+  blankDateCard: {
+    height: "240px",
+    borderRadius: "18px",
+    background: "transparent",
   },
   dateCard: {
     background: "#ffffff",
-    borderRadius: "16px",
-    padding: "12px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-    minHeight: "180px",
+    borderRadius: "22px",
+    padding: "14px",
+    boxShadow: "0 14px 24px rgba(15,23,42,0.06)",
+    height: "240px",
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: "12px",
   },
   monthTitle: {
+    fontSize: "22px",
+    fontWeight: 700,
+    color: "#0f172a",
+    marginBottom: "4px",
+  },
+  dateTitle: {
     fontSize: "18px",
     fontWeight: 700,
-    color: "#1c1c1e",
-    marginBottom: "10px",
+    color: "#0f172a",
+    textAlign: "center",
+  },
+  stallGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gridTemplateRows: "repeat(3, minmax(0, 1fr))",
+    gap: "8px",
+    flex: 1,
+  },
+  stallCell: {
+    minHeight: "0",
+    borderRadius: "16px",
+    border: "1px solid #e7e7ef",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: "10px 8px",
+    gap: "6px",
+    userSelect: "none",
+    touchAction: "manipulation",
+    cursor: "pointer",
+    position: "relative",
+    transition: "background 0.2s, border-color 0.2s",
   },
   stallName: {
     fontSize: "13px",
@@ -725,19 +764,69 @@ const styles: Record<string, React.CSSProperties> = {
   },
   stallStatusText: {
     fontSize: "13px",
-    color: "#1c1c1e",
+    color: "#475569",
     fontWeight: 600,
   },
   vendorAvatarLarge: {
-    width: "36px",
-    height: "36px",
+    width: "40px",
+    height: "40px",
     borderRadius: "50%",
-    background: "#007aff",
+    background: "#0f172a",
     color: "white",
     display: "grid",
     placeItems: "center",
     fontSize: "16px",
     fontWeight: 700,
+  },
+  lockIcon: {
+    fontSize: "12px",
+    position: "absolute",
+    top: "8px",
+    right: "8px",
+  },
+  vendorList: {
+    display: "grid",
+    gap: "12px",
+  },
+  vendorToolCard: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    borderRadius: "18px",
+    padding: "10px 12px",
+    border: "1px solid #e7e7ef",
+    background: "#ffffff",
+    cursor: "grab",
+    boxShadow: "0 6px 14px rgba(15,23,42,0.06)",
+  },
+  sidebarVendorBlock: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  vendorToolMeta: {
+    fontSize: "14px",
+    fontWeight: 600,
+    color: "#0f172a",
+    lineHeight: 1.2,
+  },
+  vendorQuickActions: {
+    display: "flex",
+    gap: "10px",
+    alignItems: "center",
+  },
+  addButton: {
+    marginTop: "12px",
+    width: "100%",
+    borderRadius: "18px",
+    border: "none",
+    background: "#0f75ff",
+    color: "white",
+    fontSize: "16px",
+    fontWeight: 700,
+    padding: "14px 0",
+    cursor: "pointer",
+    boxShadow: "0 12px 24px rgba(15,23,42,0.14)",
   },
   fieldRow: {
     display: "grid",
