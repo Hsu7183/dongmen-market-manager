@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 
-type Tab = "schedule" | "vendors";
 type StallId = "頭攤" | "門前" | "左1" | "中2" | "右3" | "魚攤";
 type StallStatus = "empty" | "occupied";
 
@@ -73,7 +72,6 @@ const getDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 const formatShortDate = (date: Date) => `${date.getMonth() + 1}/${date.getDate()}`;
-const getWeekdayLabel = (date: Date) => WEEKDAYS[date.getDay()];
 
 const buildScheduleDates = () => {
   const today = new Date();
@@ -86,7 +84,7 @@ const buildScheduleDates = () => {
 };
 
 function App() {
-  const [currentTab, setCurrentTab] = useState<Tab>("schedule");
+  const [showAddForm, setShowAddForm] = useState(false);
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     const raw = localStorage.getItem("vendors");
     const saved = raw ? (JSON.parse(raw) as Partial<Vendor>[]) : defaultVendors;
@@ -138,7 +136,6 @@ function App() {
 
   const scheduleDates = useMemo(() => buildScheduleDates(), []);
   const scheduleMonthLabel = `${scheduleDates[0].getFullYear()}年${scheduleDates[0].getMonth() + 1}月`;
-  const firstWeekday = scheduleDates[0].getDay();
   const vendorMap = useMemo(
     () =>
       vendors.reduce((map, vendor) => {
@@ -328,6 +325,7 @@ function App() {
       ...prev,
     ]);
 
+    setShowAddForm(false);
     setNewVendor({
       stallName: "",
       contactName: "",
@@ -402,17 +400,7 @@ function App() {
                 </select>
               </label>
               <label style={styles.fieldLabel}>
-                照片（拍照）
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  style={styles.fileInput}
-                  onChange={handlePhotoChange}
-                />
-              </label>
-              <label style={styles.fieldLabel}>
-                照片（選檔）
+                照片
                 <input
                   type="file"
                   accept="image/*"
@@ -539,17 +527,12 @@ function App() {
         </div>
 
         <div style={styles.dateGrid}>
-          {Array.from({ length: firstWeekday }).map((_, index) => (
-            <div key={`blank-${index}`} style={styles.blankDateCard} />
-          ))}
           {scheduleDates.map((date) => {
             const dateKey = getDateKey(date);
             const dayRecords = schedule[dateKey] ?? emptyDayRecords();
             return (
               <div key={dateKey} style={styles.dateCard}>
-                <div style={styles.dateTitle}>
-                  {formatShortDate(date)} {getWeekdayLabel(date)}
-                </div>
+                <div style={styles.dateTitle}>{formatShortDate(date)}</div>
                 <div style={styles.stallGrid}>
                   {STALLS.map((stall) => {
                     const record = dayRecords[stall];
@@ -784,8 +767,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#ffffff",
     borderRadius: "16px",
     border: "1px solid #e5e5ea",
-    padding: "12px",
-    boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+    padding: "14px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
     display: "flex",
     flexDirection: "column",
     gap: "10px",
@@ -834,11 +817,6 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: "6px",
     flex: 1,
-  },
-  blankDateCard: {
-    minHeight: "180px",
-    borderRadius: "16px",
-    background: "transparent",
   },
   stallCell: {
     minHeight: "60px",
@@ -900,7 +878,6 @@ const styles: Record<string, React.CSSProperties> = {
   vendorList: {
     display: "grid",
     gap: "12px",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   },
   vendorCardHorizontal: {
     display: "flex",
