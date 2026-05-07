@@ -145,19 +145,6 @@ function App() {
       }, {} as Record<string, Vendor>),
     [vendors]
   );
-  const rentDays = useMemo(() => {
-    const counts: Record<string, number> = {};
-    Object.values(schedule).forEach((dayRecords) => {
-      STALLS.forEach((stall) => {
-        const record = dayRecords[stall];
-        if (record.vendorId) {
-          counts[record.vendorId] = (counts[record.vendorId] ?? 0) + 1;
-        }
-      });
-    });
-    return counts;
-  }, [schedule]);
-
   const updateStall = (dateKey: string, stall: StallId, patch: Partial<StallRecord>) => {
     setSchedule((prev) => {
       const current = prev[dateKey] ?? emptyDayRecords();
@@ -728,35 +715,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#0f172a",
     marginBottom: "4px",
   },
-  dateTitle: {
-    fontSize: "18px",
-    fontWeight: 700,
-    color: "#0f172a",
-    textAlign: "center",
-  },
-  stallGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gridTemplateRows: "repeat(3, minmax(0, 1fr))",
-    gap: "8px",
-    flex: 1,
-  },
-  stallCell: {
-    minHeight: "0",
-    borderRadius: "16px",
-    border: "1px solid #e7e7ef",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: "10px 8px",
-    gap: "6px",
-    userSelect: "none",
-    touchAction: "manipulation",
-    cursor: "pointer",
-    position: "relative",
-    transition: "background 0.2s, border-color 0.2s",
-  },
   stallName: {
     fontSize: "13px",
     color: "#475569",
@@ -777,16 +735,6 @@ const styles: Record<string, React.CSSProperties> = {
     placeItems: "center",
     fontSize: "16px",
     fontWeight: 700,
-  },
-  lockIcon: {
-    fontSize: "12px",
-    position: "absolute",
-    top: "8px",
-    right: "8px",
-  },
-  vendorList: {
-    display: "grid",
-    gap: "12px",
   },
   vendorToolCard: {
     display: "flex",
