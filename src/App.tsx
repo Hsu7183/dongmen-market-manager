@@ -330,76 +330,88 @@ function App() {
 
   return (
     <div style={styles.page}>
-      <div style={styles.mainLayout}>
-        <main style={styles.mainPanel}>
-          <div style={styles.calendarHeaderSection}>
-            <div style={styles.monthTitle}>{scheduleMonthLabel}</div>
-            <div style={styles.calendarSubtitle}>攤位排班</div>
-          </div>
+      <main style={styles.mainPanel}>
+        <div style={styles.calendarHeaderSection}>
+          <div style={styles.monthTitle}>{scheduleMonthLabel}</div>
+          <div style={styles.calendarSubtitle}>攤位排班</div>
+        </div>
 
-          <div style={styles.calendarHeader}>
-            {WEEKDAYS.map((day) => (
-              <div key={day} style={styles.weekdayCell}>{day}</div>
-            ))}
-          </div>
+        <div style={styles.calendarHeader}>
+          {WEEKDAYS.map((day) => (
+            <div key={day} style={styles.weekdayCell}>{day}</div>
+          ))}
+        </div>
 
-          <div style={styles.dateGrid}>
-            {Array.from({ length: firstWeekday }).map((_, index) => (
-              <div key={`blank-${index}`} style={styles.blankDateCard} />
-            ))}
-            {scheduleDates.map((date) => {
-              const dateKey = getDateKey(date);
-              const dayRecords = schedule[dateKey] ?? emptyDayRecords();
-              return (
-                <div key={dateKey} style={styles.dateCard}>
-                  <div style={styles.dateTitle}>{formatShortDate(date)}</div>
-                  <div style={styles.stallGrid}>
-                    {STALLS.map((stall) => {
-                      const record = dayRecords[stall];
-                      const vendor = vendorMap[record.vendorId];
-                      const isDragOver =
-                        dragOverCell?.dateKey === dateKey && dragOverCell?.stall === stall;
-                      return (
-                        <div
-                          key={stall}
-                          data-drop-cell
-                          data-date-key={dateKey}
-                          data-stall={stall}
-                          style={{
-                            ...styles.stallCell,
-                            background: record.status === "occupied" ? "#e7f7ed" : "#ffffff",
-                            borderColor: isDragOver ? "#9bbcff" : "#e8e8ef",
-                            opacity: record.locked ? 0.95 : 1,
-                          }}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDrop={(event) => handleDesktopDrop(event, dateKey, stall)}
-                          onClick={() => handleStallClick(dateKey, stall)}
-                        >
-                          <div style={styles.stallName}>{stall}</div>
-                          {record.status === "occupied" && vendor ? (
-                            <>
-                              <div style={styles.vendorAvatarLarge}>{vendor.contactName.charAt(0)}</div>
-                              <div style={styles.vendorNameSmall}>{vendor.stallName}</div>
-                              <div style={styles.lockIcon}>🔒</div>
-                            </>
-                          ) : (
-                            <div style={styles.stallStatusText}>空</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+        <div style={styles.dateGrid}>
+          {Array.from({ length: firstWeekday }).map((_, index) => (
+            <div key={`blank-${index}`} style={styles.blankDateCard} />
+          ))}
+          {scheduleDates.map((date) => {
+            const dateKey = getDateKey(date);
+            const dayRecords = schedule[dateKey] ?? emptyDayRecords();
+            return (
+              <div key={dateKey} style={styles.dateCard}>
+                <div style={styles.dateTitle}>{formatShortDate(date)}</div>
+                <div style={styles.stallGrid}>
+                  {STALLS.map((stall) => {
+                    const record = dayRecords[stall];
+                    const vendor = vendorMap[record.vendorId];
+                    const isDragOver =
+                      dragOverCell?.dateKey === dateKey && dragOverCell?.stall === stall;
+                    return (
+                      <div
+                        key={stall}
+                        data-drop-cell
+                        data-date-key={dateKey}
+                        data-stall={stall}
+                        style={{
+                          ...styles.stallCell,
+                          background: record.status === "occupied" ? "#e7f7ed" : "#ffffff",
+                          borderColor: isDragOver ? "#9bbcff" : "#e8e8ef",
+                          opacity: record.locked ? 0.95 : 1,
+                        }}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => handleDesktopDrop(event, dateKey, stall)}
+                        onClick={() => handleStallClick(dateKey, stall)}
+                      >
+                        <div style={styles.stallName}>{stall}</div>
+                        {record.status === "occupied" && vendor ? (
+                          <>
+                            <div 
+                              style={{
+                                ...styles.vendorAvatarLarge,
+                                background: vendor.photo ? "transparent" : vendor.gender === "女" ? "#ffd6e7" : "#d0e8ff",
+                              }}
+                            >
+                              {vendor.photo ? (
+                                <img src={vendor.photo} alt="avatar" style={styles.avatarImage} />
+                              ) : (
+                                <span style={{ color: vendor.gender === "女" ? "#c2006e" : "#0d47a1" }}>
+                                  {vendor.contactName.charAt(0)}
+                                </span>
+                              )}
+                            </div>
+                            <div style={styles.vendorNameSmall}>{vendor.stallName}</div>
+                            <div style={styles.lockIcon}>🔒</div>
+                          </>
+                        ) : (
+                          <div style={styles.stallStatusText}>空</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        </main>
+              </div>
+            );
+          })}
+        </div>
+      </main>
 
-        <aside style={styles.sidebar}>
-          <div style={styles.sidebarInner}>
-            <div style={styles.sidebarScroll}>
+      <aside style={styles.sidebar}>
+        <div style={styles.sidebarInner}>
+          <div style={styles.sidebarScroll}>
               {showAddForm ? (
-                <div style={styles.card}>
+                <div style={styles.formContainer}>
                   <div style={styles.sidebarTitle}>新增攤販</div>
                   <input
                     style={styles.input}
@@ -528,67 +540,63 @@ function App() {
                   <button style={styles.primaryButton} onClick={addVendor}>新增攤販</button>
                 </div>
               ) : (
-                <div style={styles.sidebarSection}>
-                  <div style={styles.sidebarTitle}>攤販工具列</div>
+                <div style={styles.vendorCircleList}>
                   <div style={styles.dragHint}>{dragMessage || "長按攤販卡片開始拖曳"}</div>
-                  <div style={styles.vendorList}>
-                    {vendors.map((vendor) => {
-                      const isActive = activeVendorActions === vendor.id;
-                      const activeBg = vendor.photo ? "transparent" : vendor.gender === "女" ? "#ffd6e7" : "#d0e8ff";
-                      return (
-                        <div key={vendor.id} style={styles.sidebarVendorBlock}>
-                          <div
-                            draggable
-                            onDragStart={(event) => event.dataTransfer.setData("text/plain", vendor.id)}
-                            onTouchStart={(event) => handleVendorTouchStart(vendor.id, event)}
-                            onTouchMove={handleVendorTouchMove}
-                            onTouchEnd={handleVendorTouchEnd}
-                            onTouchCancel={handleVendorTouchEnd}
-                            onClick={() => setActiveVendorActions(isActive ? null : vendor.id)}
-                            style={{
-                              ...styles.vendorToolCard,
-                              background: isActive ? "#f2f8ff" : "#ffffff",
-                            }}
-                          >
-                            <div style={{ ...styles.avatar, width: "36px", height: "36px", fontSize: "16px" , background: activeBg }}>
-                              {vendor.photo ? (
-                                <img src={vendor.photo} alt="avatar" style={styles.avatarImage} />
-                              ) : (
-                                <span style={{ color: vendor.gender === "女" ? "#c2006e" : "#0d47a1" }}>
-                                  {vendor.contactName.charAt(0)}
-                                </span>
-                              )}
-                            </div>
-                            <div style={styles.vendorToolMeta}>{vendor.stallName}</div>
-                          </div>
-                          {isActive ? (
-                            <div style={styles.vendorQuickActions}>
-                              <button
-                                type="button"
-                                style={styles.quickActionButton}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  window.location.href = `tel:${vendor.phone}`;
-                                }}
-                              >
-                                📞
-                              </button>
-                              <button
-                                type="button"
-                                style={styles.quickActionButton}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  alert(vendor.line ? `LINE ID：${vendor.line}` : "沒有 LINE ID");
-                                }}
-                              >
-                                💬
-                              </button>
-                            </div>
-                          ) : null}
+                  {vendors.map((vendor) => {
+                    const activeBg = vendor.photo ? "transparent" : vendor.gender === "女" ? "#ffd6e7" : "#d0e8ff";
+                    return (
+                      <div key={vendor.id} style={styles.vendorCircleItem}>
+                        <div
+                          draggable
+                          onDragStart={(event) => event.dataTransfer.setData("text/plain", vendor.id)}
+                          onTouchStart={(event) => handleVendorTouchStart(vendor.id, event)}
+                          onTouchMove={handleVendorTouchMove}
+                          onTouchEnd={handleVendorTouchEnd}
+                          onTouchCancel={handleVendorTouchEnd}
+                          onClick={() => setActiveVendorActions(activeVendorActions === vendor.id ? null : vendor.id)}
+                          style={{
+                            ...styles.vendorCircleAvatar,
+                            background: activeBg,
+                            cursor: "grab",
+                            position: "relative",
+                          }}
+                        >
+                          {vendor.photo ? (
+                            <img src={vendor.photo} alt="avatar" style={styles.avatarImage} />
+                          ) : (
+                            <span style={{ color: vendor.gender === "女" ? "#c2006e" : "#0d47a1", fontSize: "18px", fontWeight: 700 }}>
+                              {vendor.contactName.charAt(0)}
+                            </span>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div style={styles.vendorCircleLabel}>{vendor.stallName.substring(0, 4)}</div>
+                        {activeVendorActions === vendor.id && (
+                          <div style={styles.vendorQuickActionsMobile}>
+                            <button
+                              type="button"
+                              style={styles.quickActionButtonMobile}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                window.location.href = `tel:${vendor.phone}`;
+                              }}
+                            >
+                              📞
+                            </button>
+                            <button
+                              type="button"
+                              style={styles.quickActionButtonMobile}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                alert(vendor.line ? `LINE ID：${vendor.line}` : "沒有 LINE ID");
+                              }}
+                            >
+                              💬
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -598,57 +606,49 @@ function App() {
           </div>
         </aside>
       </div>
-    </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    minHeight: "100vh",
+    position: "fixed",
+    top: 0,
+    left: 0,
     width: "100vw",
+    height: "100vh",
     display: "flex",
     flexDirection: "row",
-    gap: "10px",
-    padding: "10px 0",
     background: "#f4f5f7",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    overflowX: "hidden",
-  },
-  mainLayout: {
-    width: "87.5vw",
-    maxWidth: "87.5vw",
-    minWidth: "87.5vw",
-    display: "flex",
-    flexDirection: "column",
-    gap: "14px",
-    minHeight: "100vh",
     overflow: "hidden",
   },
   mainPanel: {
+    width: "87.5vw",
+    height: "100vh",
     flex: 1,
-    minWidth: 0,
     display: "flex",
     flexDirection: "column",
     gap: "14px",
+    padding: "10px 14px",
     overflow: "hidden",
   },
   sidebar: {
     width: "12.5vw",
-    minWidth: "80px",
-    maxWidth: "120px",
+    height: "100vh",
+    position: "fixed",
+    right: 0,
+    top: 0,
     display: "flex",
     flexDirection: "column",
-    minHeight: "100vh",
-    position: "relative",
+    background: "#ffffff",
+    borderLeft: "1px solid #e8e8ef",
+    overflow: "hidden",
   },
   sidebarInner: {
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    background: "#ffffff",
-    borderRadius: "24px",
     padding: "14px 10px",
-    boxShadow: "0 16px 32px rgba(15,15,15,0.06)",
     overflow: "hidden",
   },
   sidebarScroll: {
@@ -656,7 +656,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: "auto",
     display: "flex",
     flexDirection: "column",
-    gap: "14px",
+    gap: "8px",
     paddingRight: "2px",
   },
   sidebarSection: {
@@ -674,6 +674,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "flex-end",
     gap: "12px",
+    flexShrink: 0,
   },
   calendarSubtitle: {
     color: "#6b7280",
@@ -683,6 +684,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
     gap: "6px",
+    flexShrink: 0,
   },
   weekdayCell: {
     textAlign: "center",
@@ -698,8 +700,10 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
     gap: "8px",
+    flex: 1,
     overflowY: "auto",
     paddingBottom: "12px",
+    minHeight: 0,
   },
   blankDateCard: {
     height: "240px",
@@ -723,7 +727,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: "4px",
   },
   stallName: {
-    fontSize: "13px",
+    fontSize: "11px",
     color: "#475569",
     fontWeight: 700,
   },
@@ -733,15 +737,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
   },
   vendorAvatarLarge: {
-    width: "40px",
-    height: "40px",
+    width: "36px",
+    height: "36px",
     borderRadius: "50%",
-    background: "#0f172a",
-    color: "white",
     display: "grid",
     placeItems: "center",
-    fontSize: "16px",
+    fontSize: "14px",
     fontWeight: 700,
+    flexShrink: 0,
   },
   vendorToolCard: {
     display: "flex",
@@ -774,7 +777,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
   },
   addButton: {
-    marginTop: "12px",
+    marginTop: "auto",
     width: "100%",
     borderRadius: "18px",
     border: "none",
@@ -782,9 +785,68 @@ const styles: Record<string, React.CSSProperties> = {
     color: "white",
     fontSize: "16px",
     fontWeight: 700,
-    padding: "14px 0",
+    padding: "12px 0",
     cursor: "pointer",
     boxShadow: "0 12px 24px rgba(15,23,42,0.14)",
+    flexShrink: 0,
+  },
+  vendorCircleList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    alignItems: "center",
+  },
+  vendorCircleItem: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "4px",
+    position: "relative",
+  },
+  vendorCircleAvatar: {
+    width: "48px",
+    height: "48px",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    boxShadow: "0 4px 12px rgba(15,23,42,0.08)",
+    cursor: "grab",
+  },
+  vendorCircleLabel: {
+    fontSize: "12px",
+    fontWeight: 600,
+    color: "#1c1c1e",
+    textAlign: "center",
+    lineHeight: 1.2,
+    maxWidth: "60px",
+    wordBreak: "break-word",
+  },
+  vendorQuickActionsMobile: {
+    display: "flex",
+    gap: "4px",
+    position: "absolute",
+    bottom: "-50px",
+    flexDirection: "column",
+  },
+  quickActionButtonMobile: {
+    width: "36px",
+    height: "36px",
+    borderRadius: "50%",
+    border: "none",
+    background: "#f2f2f7",
+    fontSize: "16px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formContainer: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    overflowY: "auto",
   },
   fieldRow: {
     display: "grid",
@@ -867,20 +929,21 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
   },
   stallCell: {
-    minHeight: "0",
+    minHeight: "50px",
     borderRadius: "16px",
     border: "1px solid #e8e8ef",
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
-    padding: "10px 8px",
-    gap: "6px",
+    padding: "8px",
+    gap: "4px",
     userSelect: "none",
     touchAction: "manipulation",
     cursor: "pointer",
     position: "relative",
     height: "100%",
+    maxHeight: "80px",
   },
   emptyText: {
     fontSize: "14px",
@@ -916,7 +979,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "12px",
   },
   sectionTitle: {
-    fontSize: "18px",
+    fontSize: "16px",
     fontWeight: 700,
     color: "#1c1c1e",
   },
